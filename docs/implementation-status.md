@@ -1,16 +1,16 @@
 # Implementation status
 
-BuildFerry implements the actual execution path and has been deployed as an independent application on an existing Coolify server. The live container passed its health check and served the setup flow over valid HTTPS. Real GitHub authorization and the two-owner pilot remain pending. No existing Wisbid workflow, worker repository, branch rule, required check, environment approval, database release or deployment has been changed.
+BuildFerry runs as an independent application on an existing Coolify server over valid HTTPS. Real GitHub App registration, owner and invited-member authorization, current-period billing reads, private worker installation and Ubicloud dispatch have passed live setup. Independent build and full-test workloads are executing against a real private source repository. Final results and the second owner's worker remain pending. No existing Wisbid workflow, worker repository, branch rule, required check, environment approval, database release or deployment has been changed.
 
 | Area | Implemented | Validation or work still required |
 | --- | --- | --- |
-| Self hosting | One container and persistent volume; automatic encryption key; one-use claim; HTTPS setup; backup and restore tooling; successful independent Coolify deployment and live instance claim | Finish real GitHub onboarding and exercise live backup/recovery |
-| GitHub | Manifest App setup, invited PKCE sign-in, token rotation, owner-wide usage, scoped installation tokens | Live owner and cofounder authorization with the execution permission set |
-| Workers | Explicit per-owner project approvals; fresh private repository guard; atomic launcher commit and pinned tag; signed, single-use worker claim; checkout credential revoked before commands | Install on fresh, consenting worker repositories; prove live OIDC claim shape and revocation |
+| Self hosting | One container and persistent volume; automatic encryption key; one-use claim; HTTPS setup; backup and restore tooling; successful independent Coolify deployment and live instance claim; controller upgrade during a running worker without duplicate dispatch | Exercise live backup/recovery |
+| GitHub | Manifest App setup, invited PKCE sign-in, token rotation, owner-wide usage, scoped installation tokens; two real account authorizations and billing reads | Exercise live authorization expiry and reconnection |
+| Workers | Explicit per-owner project approvals; fresh private repository guard; atomic launcher commit and pinned tag; signed, single-use worker claim; checkout credential revoked before commands; real private-source preparation and pre-command audit upload | Install and exercise the second owner's consenting worker |
 | Routing | Durable priority queue, fair reconciliation, transactional runtime reservations, owner caps/reserves/slots, pause/drain, UTC period accounting, bounded paid fallback | Billing settlement currently remains conservative and can double-count completed local usage already present in the owner-wide report |
-| Ubicloud | Project and installation checks; exact worker-repository preflight; monthly and per-job spend reservations; configured rate | Real worker dispatch and matched benchmark against native GitHub; invoice reconciliation is not implemented |
-| Results | Independent run, actor, attempt, revision, step and immutable pre-command audit checks; additional GitHub check; restart-safe finalization; cancellation race handling | Live success, failure, cancellation and uncertain-response pilot evidence |
-| Dashboard | Real workload setup, worker consent, queue/run/cancel controls, worker logs, measured queue/command time and rounded usage | Live provider usability exercise; logs require the viewer's normal GitHub repository access |
+| Ubicloud | Project and installation checks; exact worker-repository preflight; monthly and per-job spend reservations; configured rate; real runners executing separate build and test recipes under a small spend cap | Matched benchmark against native GitHub; invoice reconciliation is not implemented |
+| Results | Independent run, actor, attempt, revision, step and immutable pre-command audit checks; additional GitHub check; restart-safe finalization; cancellation race handling; live failed-run accounting, verified-stop reservation recovery and pre-dispatch cancellation | Live successful result publication, running cancellation and uncertain-response pilot evidence |
+| Dashboard | Real workload setup, worker consent, queue/run/cancel controls, worker logs, measured queue/command time and rounded usage; live account, provider and private-source setup | Logs require the viewer's normal GitHub repository access |
 | Existing checks | Original workflows, required checks, approvals and release jobs untouched | Trusted source bridge, original check-producer parity, automatic test sharding and merged coverage before replacing any original check |
 
 ## Scope and limits
@@ -31,9 +31,9 @@ App permissions are Plan and Metadata read, plus Actions, Contents, Workflows an
 
 ## Acceptance still pending
 
-1. Complete GitHub sign-in and App registration through the deployed instance's real setup flow.
-2. Complete real App registration, owner and cofounder consent, billing verification and fresh worker installation without changing an existing CI worker.
-3. Run real success, failure and cancellation cases on both owners, plus a budgeted Ubicloud run. Verify results, billing ownership and restart recovery.
-4. Compare repeated identical workloads before making speed or cost claims. Retain original source checks until a reviewed bridge proves complete test and coverage parity.
+1. Finish the second consenting account owner's fresh worker installation and workload approvals, then prove actual included-minute execution there.
+2. Complete the live private-source build and full-test runs, independently verify their results and publish the additional checks.
+3. Exercise running cancellation, uncertain-response recovery, authorization reconnection and live backup/restore. A stopped failed worker must be reverified before releasing held capacity; its failed result stays failed.
+4. Compare repeated identical workloads on native GitHub and Ubicloud before making speed or cost claims. Current pilot workers start without the source project's existing CI caches. Retain original source checks until a reviewed bridge proves complete test and coverage parity.
 
 The [MVP plan](mvp-plan.md) remains the broader acceptance contract. Implemented execution is not evidence that live acceptance, automatic shard/coverage aggregation, original check migration or a measured speed improvement has passed.
