@@ -1,0 +1,80 @@
+name: Native runner probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      probe_id:
+        description: Unique 16-character lowercase hexadecimal probe ID
+        required: true
+        type: string
+      fail_job:
+        description: Deliberately fail the native job to verify failure propagation
+        default: false
+        type: boolean
+
+permissions: {}
+
+jobs:
+  provide-worker:
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      PROBE_ID: ${{ inputs.probe_id }}
+      PROBE_JIT: ${{ secrets.BUILDFERRY_RUNNER_PROBE_JIT }}
+    steps:
+      - name: Start a single-use official runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PROBE_ID" =~ ^[a-f0-9]{16}$ ]] || exit 1
+          test -n "$PROBE_JIT"
+          mkdir -p "$RUNNER_TEMP/buildferry-runner"
+          cd "$RUNNER_TEMP/buildferry-runner"
+          curl --fail --location --silent --show-error \
+            https://github.com/actions/runner/releases/download/v2.338.0/actions-runner-linux-x64-2.338.0.tar.gz \
+            --output runner.tar.gz
+          echo 'af4b794c1bc41d73d40535e3fe092a39f9679cd8d965954c2aca25a05ca41d32  runner.tar.gz' | sha256sum --check --strict
+          tar xzf runner.tar.gz
+          ./run.sh --jitconfig "$PROBE_JIT"
+
+  native-job:
+    if: github.actor == github.repository_owner
+    runs-on: buildferry-probe-${{ inputs.probe_id }}
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    env:
+      RUNNER_KIND: ${{ runner.environment }}
+      EXPECTED_REPOSITORY: ${{ github.repository }}
+      EXPECTED_SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout through the original job
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Verify native job context
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_KIND" = self-hosted
+          test "$GITHUB_REPOSITORY" = "$EXPECTED_REPOSITORY"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          printf 'Native checkout, revision and runner context verified.\n' > "$RUNNER_TEMP/buildferry-native-probe.txt"
+      - name: Upload through the original job
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-probe-${{ inputs.probe_id }}
+          path: ${{ runner.temp }}/buildferry-native-probe.txt
+          if-no-files-found: error
+          retention-days: 1
+      - name: Exercise native failure
+        if: inputs.fail_job
+        run: exit 1
+
+  downstream-gate:
+    needs: [provide-worker, native-job]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - run: echo 'The original dependency gate passed.'
