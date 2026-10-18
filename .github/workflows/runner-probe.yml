@@ -11,6 +11,10 @@ on:
         description: Deliberately fail the native job to verify failure propagation
         default: false
         type: boolean
+      expect_cache_hit:
+        description: Require restoration of the previous successful probe's cache
+        default: false
+        type: boolean
 
 permissions: {}
 
@@ -62,6 +66,25 @@ jobs:
           test "$GITHUB_REPOSITORY" = "$EXPECTED_REPOSITORY"
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           printf 'Native checkout, revision and runner context verified.\n' > "$RUNNER_TEMP/buildferry-native-probe.txt"
+      - name: Restore the original repository's cache
+        id: cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ runner.temp }}/buildferry-native-cache
+          key: buildferry-native-probe-v1-${{ github.sha }}
+      - name: Verify cache behavior on this fresh worker
+        env:
+          EXPECT_CACHE_HIT: ${{ inputs.expect_cache_hit }}
+          CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EXPECT_CACHE_HIT" == true ]]; then
+            test "$CACHE_HIT" = true
+            test "$(cat "$RUNNER_TEMP/buildferry-native-cache/probe.txt")" = 'BuildFerry native cache verification'
+          fi
+          mkdir -p "$RUNNER_TEMP/buildferry-native-cache"
+          printf 'BuildFerry native cache verification\n' > "$RUNNER_TEMP/buildferry-native-cache/probe.txt"
       - name: Upload through the original job
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
