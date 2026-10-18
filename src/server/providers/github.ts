@@ -139,9 +139,10 @@ export class GitHub {
       }
       total += item.quantity;
     }
-    if (!Number.isSafeInteger(total) || total > 1_000_000)
+    if (!Number.isFinite(total) || total > 1_000_000)
       throw new ProviderError(422, "The account usage could not be verified.");
-    return total;
+    // Billing quantities can include partial minutes; round usage up to preserve the reserve.
+    return Math.ceil(total);
   }
 
   async repository(

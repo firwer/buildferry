@@ -111,7 +111,6 @@ describe("GitHub usage and repository eligibility", () => {
   it.each([
     { sku: "actions_macos" },
     { date: "2026-09-18" },
-    { quantity: 0.5 },
     { quantity: 1_000_001 },
   ])("fails closed on unsupported usage %o", (changes) => {
     const fetcher = vi
@@ -120,6 +119,19 @@ describe("GitHub usage and repository eligibility", () => {
     return expect(
       new GitHub(fetcher).usage("owner", "token", "2026-10"),
     ).rejects.toThrow();
+  });
+  it("rounds verified fractional usage up instead of rejecting it or overstating free capacity", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      response({
+        usageItems: [
+          { ...row, quantity: 45.25 },
+          { ...row, quantity: 0.5 },
+        ],
+      }),
+    );
+    expect(await new GitHub(fetcher).usage("owner", "token", "2026-10")).toBe(
+      46,
+    );
   });
   it("allows an empty verified report", async () => {
     const fetcher = vi
