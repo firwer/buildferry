@@ -45,7 +45,9 @@ Native routing uses the original GitHub check results. BuildFerry does not publi
 
 Signed events and polling discover queued original jobs. Unknown dispatch acceptance keeps its reservation and is reconciled, never blindly retried on another account. Cancellation stops the original workflow and releases capacity only after the host is verified stopped. Restart recovery retains recorded intent. Do not delete the database to clear held capacity. Wait for active jobs before replacing a worker repository or updating its launcher.
 
-Usage verification expires after 15 minutes and refreshes while work is queued. Attributed worker billing avoids subtracting the same completed minutes twice; missing attribution keeps conservative local holds. Other workflows can spend the owner's allowance concurrently. Keep GitHub's own spending controls and an appropriate reserve. The earlier recipe execution API remains for recorded pilot runs; it is separate from native routing.
+Usage verification expires after 15 minutes and refreshes while work is queued. Installing or updating a runner also verifies that account's latest usage and private worker repository, then refreshes its account card. Refresh alone verifies an existing setup; it does not install a runner. Attributed worker billing avoids subtracting the same completed minutes twice; missing attribution keeps conservative local holds. Other workflows can spend the owner's allowance concurrently. Keep GitHub's own spending controls and an appropriate reserve. The earlier recipe execution API remains for recorded pilot runs; it is separate from native routing.
+
+Routing applies the workflow or job's provider order first, then account priority (1 goes first). Among equally ranked eligible accounts, it prefers the largest remaining fraction of contributed minutes, adjusted by share weight. Reservations count immediately, and parallel limits exclude busy accounts. Equal scores use the account ID for a stable tie-breaker. This is allowance balancing, not round-robin or a prediction of build speed.
 
 ## Coolify
 
