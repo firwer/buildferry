@@ -2,7 +2,7 @@
 
 BuildFerry routes independent builds and tests across a team's GitHub accounts, with Ubicloud as budgeted fallback. Each owner keeps control of their contribution, reserve, approved projects and parallel slots.
 
-**Status: live pilot.** Self-hosting, GitHub App registration, two account authorizations, billing reads, private worker installation and Ubicloud dispatch have been exercised on a real deployment. Independent build and full-test workloads are running against an actual private source repository. A second owner's worker, successful result publication and matched performance measurements still need live validation. Existing project workflows and release gates stay in place; their migration is a separate reviewed step. See [implementation status](docs/implementation-status.md).
+**Status: live pilot.** Self-hosting, GitHub App registration, two account authorizations, billing reads, private worker installation and Ubicloud dispatch have been exercised on a real deployment. An actual private-source build passed independent result verification and published its successful additional check. A full active test run reached its time limit; a resource-aware retry is running. A second owner's worker and matched provider benchmarks still need live validation. Existing project workflows and release gates stay in place; their migration is a separate reviewed step. See [implementation status](docs/implementation-status.md).
 
 ## Run locally
 
