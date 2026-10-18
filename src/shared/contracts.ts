@@ -81,6 +81,8 @@ export const candidateSchema = z.object({
   weight: z.number().positive(),
   concurrency: z.number().int().min(1),
   availableMinutes: minutes,
+  capacityMinutes: minutes.optional(),
+  pendingMinutes: minutes.optional(),
   availableMicros: micros,
   rateMicros: micros,
   memoryGiB: z.number().positive(),
@@ -116,7 +118,7 @@ export const shardInputSchema = z
           .strict(),
       )
       .min(1)
-      .max(2000),
+      .max(20_000),
   })
   .strict()
   .refine(

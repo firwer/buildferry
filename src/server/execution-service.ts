@@ -395,7 +395,11 @@ export class ExecutionService {
         memoryGiB: job.recipe.memoryGiB,
         maxCostMicros: job.recipe.maxCostMicros,
       }).assignments[0];
-      if (!assignment?.candidateId || !assignment.runner) return null;
+      if (!assignment?.candidateId || !assignment.runner) {
+        if (assignment && assignment.reason !== job.message)
+          this.save({ ...job, message: assignment.reason });
+        return null;
+      }
       const candidate = candidates.find(
         (value) => value.id === assignment.candidateId,
       );

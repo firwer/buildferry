@@ -44,6 +44,13 @@ export function candidatesFor(
     priority: account.settings.priority,
     weight: account.settings.weight,
     concurrency: account.settings.concurrency,
+    capacityMinutes: Math.max(
+      0,
+      Math.min(
+        account.settings.contributionMinutes,
+        account.settings.includedMinutes - account.settings.reserveMinutes,
+      ),
+    ),
     availableMinutes: Math.max(
       0,
       Math.min(
@@ -54,6 +61,17 @@ export function candidatesFor(
       ),
     ),
     availableMicros: 0,
+    pendingMinutes:
+      account.settings.state === "active" && accountReason(account, now)
+        ? Math.max(
+            0,
+            Math.min(
+              account.settings.contributionMinutes,
+              account.settings.includedMinutes -
+                account.settings.reserveMinutes,
+            ),
+          )
+        : undefined,
     rateMicros: 0,
     memoryGiB: 8,
     reason: accountReason(account, now),
@@ -97,15 +115,34 @@ function exclusion(
   return null;
 }
 
-/** Respect tiers first, then price and weighted remaining capacity within each tier. */
+/** Respect tiers and price, then balance the fraction of each owner's contributed allowance. */
 function compareCandidates(left: Candidate, right: Candidate): number {
   return (
     left.priority - right.priority ||
     left.rateMicros - right.rateMicros ||
-    right.availableMinutes * right.weight -
-      left.availableMinutes * left.weight ||
+    (right.availableMinutes * right.weight) /
+      Math.max(1, right.capacityMinutes ?? 1) -
+      (left.availableMinutes * left.weight) /
+        Math.max(1, left.capacityMinutes ?? 1) ||
     left.id.localeCompare(right.id, "en")
   );
+}
+
+/** Temporary free-capacity shortages must not silently authorize paid overflow. */
+function pendingFreeReason(
+  candidate: Candidate,
+  input: PreviewInput,
+  assigned: number,
+): string | null {
+  if (candidate.kind !== "github" || candidate.memoryGiB < input.memoryGiB)
+    return null;
+  const pending =
+    candidate.pendingMinutes ??
+    (!candidate.reason && assigned >= candidate.concurrency
+      ? candidate.availableMinutes + assigned * input.maxMinutes
+      : 0);
+  if (pending < input.maxMinutes) return null;
+  return `Waiting for ${candidate.name}'s free capacity. ${candidate.reason ?? "Current jobs still hold its free capacity."} Paid runners are on hold.`;
 }
 
 export function previewRouting(
@@ -122,7 +159,16 @@ export function previewRouting(
         !exclusion(candidate, input, slots.get(candidate.id) ?? 0, budget),
     );
     eligible.sort(compareCandidates);
-    const chosen = eligible.at(0);
+    let chosen = eligible.at(0);
+    const waiting = available
+      .filter(
+        (candidate) =>
+          (!chosen || candidate.priority <= chosen.priority) &&
+          pendingFreeReason(candidate, input, slots.get(candidate.id) ?? 0),
+      )
+      .sort(compareCandidates)
+      .at(0);
+    if (chosen?.kind === "ubicloud" && waiting) chosen = undefined;
     if (!chosen) {
       assignments.push({
         job,
@@ -130,8 +176,10 @@ export function previewRouting(
         name: "Waiting for capacity",
         runner: null,
         costMicros: 0,
-        reason:
-          "No allowed account or provider fits the remaining capacity, memory and budget.",
+        reason: waiting
+          ? (pendingFreeReason(waiting, input, slots.get(waiting.id) ?? 0) ??
+            "Waiting for free capacity.")
+          : "No allowed account or provider fits the remaining capacity, memory and budget.",
       });
       continue;
     }

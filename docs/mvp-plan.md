@@ -2,6 +2,8 @@
 
 BuildFerry will let a team connect its GitHub accounts, contribute a chosen amount of included CI capacity, and route builds and tests through those accounts or Ubicloud. Owners will manage budgets and fallback priorities from a self-hosted dashboard. Each project will retain its required checks, coverage requirements, and release approvals.
 
+The preferred source interface is now a native `runs-on: buildferry` runner broker, preserving the original GitHub job and result. See the [native runner design and live probe evidence](native-runner-design.md). The source-dispatch bridge described below is the earlier recipe-mode approach; native-runner implementation gates supersede it for normal workflow adoption. Automatic native routing is not yet implemented.
+
 The first release targets one team operating one instance, with several projects and any configured number of consenting personal GitHub account owners. Concurrency and provider limits still bound usable capacity. GitHub is the initial source host; project commands remain independent of language or framework.
 
 ## Product boundaries
@@ -44,15 +46,15 @@ Automatic private-repository creation must be proven with the supported GitHub A
 
 ## Dashboard controls
 
-| View | Required controls and information |
-| --- | --- |
-| Overview | Queue, active work, connection health, contributed capacity, observed spend, estimated spend, and last billing refresh |
-| Accounts | Link, pause, drain, reconnect, or remove an owner; allowance, contribution cap, reserve, billing period, allowed projects, and concurrency limit |
-| Providers | Connect Ubicloud; verify installations; select supported runner sizes; configure rates and budget limits; show connection health |
-| Routing | Ordered tiers, fixed order or shared allocation within a tier, account weights, queue wait limit, and permitted fallback providers |
-| Jobs | Project, revision, attempt, urgency, selected account and runner, routing explanation, queue time, duration, logs, cancel, and retry |
-| Performance | Time spent in setup, tests, builds, and cache transfer; slowest required path; aggregate compute minutes; observed and estimated cost |
-| Access and history | Instance administrators, account owners, project viewers, and an audit history of credential, routing, and budget changes |
+| View               | Required controls and information                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Overview           | Queue, active work, connection health, contributed capacity, observed spend, estimated spend, and last billing refresh                           |
+| Accounts           | Link, pause, drain, reconnect, or remove an owner; allowance, contribution cap, reserve, billing period, allowed projects, and concurrency limit |
+| Providers          | Connect Ubicloud; verify installations; select supported runner sizes; configure rates and budget limits; show connection health                 |
+| Routing            | Ordered tiers, fixed order or shared allocation within a tier, account weights, queue wait limit, and permitted fallback providers               |
+| Jobs               | Project, revision, attempt, urgency, selected account and runner, routing explanation, queue time, duration, logs, cancel, and retry             |
+| Performance        | Time spent in setup, tests, builds, and cache transfer; slowest required path; aggregate compute minutes; observed and estimated cost            |
+| Access and history | Instance administrators, account owners, project viewers, and an audit history of credential, routing, and budget changes                        |
 
 Instance administrators manage projects and routing. Account owners set their contribution ceiling, permitted projects, and personal reserve; an administrator cannot increase those limits without that owner's approval. Viewers can inspect authorized projects without seeing secrets or private usage details from unrelated repositories.
 
@@ -66,11 +68,11 @@ Lower-numbered fallback tiers run first. A job can reach the next tier when the 
 
 The initial **Free minutes first** preset is:
 
-| Tier | Candidate capacity | Allocation rule |
-| --- | --- | --- |
-| 1 | All connected, eligible GitHub included-minute accounts | Spread work according to remaining contributed capacity and configured weights |
-| 2 | Ubicloud runner profiles | Use a compatible profile within explicit per-job and period budgets |
-| Disabled | Paid GitHub overflow and AWS | Never selected by this preset |
+| Tier     | Candidate capacity                                      | Allocation rule                                                                |
+| -------- | ------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 1        | All connected, eligible GitHub included-minute accounts | Spread work according to remaining contributed capacity and configured weights |
+| 2        | Ubicloud runner profiles                                | Use a compatible profile within explicit per-job and period budgets            |
+| Disabled | Paid GitHub overflow and AWS                            | Never selected by this preset                                                  |
 
 An owner can put accounts into different tiers for a strict account order, or the same tier to share work. Within a shared tier, prevent concurrent jobs from spending the same remaining allowance. Apply cache affinity only among otherwise eligible candidates, without exceeding an owner's contribution or reserve.
 
@@ -151,14 +153,14 @@ Record queue delay, setup time, cache transfer, critical-path duration, rounded 
 
 Keep the initial repository small:
 
-| Area | Responsibility |
-| --- | --- |
-| Dashboard | Setup, accounts, routing, jobs, budgets, and performance views |
-| Service | Authentication, GitHub App lifecycle, API, webhooks, and provider connections |
-| Scheduler | Eligibility, priorities, reservations, job state, cancellation, and reconciliation |
-| Providers | GitHub-hosted allowance execution and Ubicloud runner selection through GitHub Actions |
-| Workers and integration | Pinned worker launcher, source dispatcher, result verifier, and test adapters |
-| Persistence | Versioned SQLite migrations for identities, connections, policies, reservations, runs, artifacts, and audit events |
+| Area                    | Responsibility                                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Dashboard               | Setup, accounts, routing, jobs, budgets, and performance views                                                     |
+| Service                 | Authentication, GitHub App lifecycle, API, webhooks, and provider connections                                      |
+| Scheduler               | Eligibility, priorities, reservations, job state, cancellation, and reconciliation                                 |
+| Providers               | GitHub-hosted allowance execution and Ubicloud runner selection through GitHub Actions                             |
+| Workers and integration | Pinned worker launcher, source dispatcher, result verifier, and test adapters                                      |
+| Persistence             | Versioned SQLite migrations for identities, connections, policies, reservations, runs, artifacts, and audit events |
 
 Ubicloud and standard GitHub workers share the GitHub Actions dispatch and result transport. Keep their billing and eligibility rules separate without duplicating that transport. Persist recipe and policy snapshots on each run rather than adding a generic plugin system or a general workflow language. Use TypeScript with validated boundary schemas. BuildFerry never imports the first adopting application's business code.
 
@@ -166,13 +168,13 @@ Prepare a container release, a working demo with synthetic data, setup and recov
 
 ## Milestones and acceptance
 
-| Milestone | Deliverable | Required evidence |
-| --- | --- | --- |
-| 0 Provider investigation | Prove App registration, account usage authorization, private worker provisioning, source access, run correlation, cancellation, OIDC, and Ubicloud availability | Two consenting personal accounts and one Ubicloud connection complete isolated probes; document billing period, lag, settling, permission, and provider-policy assumptions |
-| 1 Self hosting and dashboard | Container, persistent storage, installation claim, GitHub login, invitations, account connections, and read-only job and usage views | Fresh installation reaches a verified connection through the browser; restart and backup restore preserve configuration; unauthorized enrollment and secret disclosure tests pass |
-| 2 Account and provider routing | Transactional reservations, owner contribution limits, ordered tiers, shared allocation, Ubicloud fallback, draining, and verified original checks | Work is assigned across at least three configured test accounts or equivalent fixtures; two real consenting owners execute isolated jobs; concurrency, outage, duplicate dispatch, cancellation, and stale-result scenarios retain correct gates |
-| 3 Performance | Two and four test groups, complete coverage merge, compatible artifact reuse, and measured runner profiles | Every required suite and check is preserved; cold and warm comparison reports show actual feedback time, total minutes, and cost; budget limits remain enforced |
-| 4 First project pilot | Reviewed integration PR, routing preview, opt-in traffic, rollback exercise, and release protection comparison | Existing check names, producer identity, readiness behavior, database release ordering, and production approvals remain effective; owner signs off before wider use |
+| Milestone                      | Deliverable                                                                                                                                                     | Required evidence                                                                                                                                                                                                                                |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0 Provider investigation       | Prove App registration, account usage authorization, private worker provisioning, source access, run correlation, cancellation, OIDC, and Ubicloud availability | Two consenting personal accounts and one Ubicloud connection complete isolated probes; document billing period, lag, settling, permission, and provider-policy assumptions                                                                       |
+| 1 Self hosting and dashboard   | Container, persistent storage, installation claim, GitHub login, invitations, account connections, and read-only job and usage views                            | Fresh installation reaches a verified connection through the browser; restart and backup restore preserve configuration; unauthorized enrollment and secret disclosure tests pass                                                                |
+| 2 Account and provider routing | Transactional reservations, owner contribution limits, ordered tiers, shared allocation, Ubicloud fallback, draining, and verified original checks              | Work is assigned across at least three configured test accounts or equivalent fixtures; two real consenting owners execute isolated jobs; concurrency, outage, duplicate dispatch, cancellation, and stale-result scenarios retain correct gates |
+| 3 Performance                  | Two and four test groups, complete coverage merge, compatible artifact reuse, and measured runner profiles                                                      | Every required suite and check is preserved; cold and warm comparison reports show actual feedback time, total minutes, and cost; budget limits remain enforced                                                                                  |
+| 4 First project pilot          | Reviewed integration PR, routing preview, opt-in traffic, rollback exercise, and release protection comparison                                                  | Existing check names, producer identity, readiness behavior, database release ordering, and production approvals remain effective; owner signs off before wider use                                                                              |
 
 Implement in this order. Use the existing reviewed cross-account bridge as a reference for dispatch, source audits, independent verification, and cancellation. Generalize those behaviors without publishing its private configuration. Do not move active workloads or credentials into BuildFerry while completing this planning milestone.
 

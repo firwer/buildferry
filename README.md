@@ -6,6 +6,8 @@ BuildFerry routes independent builds and tests across a team's GitHub accounts, 
 
 Next: [performance and budget rollout](docs/performance-and-budget-plan.md), covering three or more contributing accounts, free-first queueing, cache reuse, balanced test groups and measured speed-versus-minutes tradeoffs.
 
+The preferred workflow interface is a [native runner broker](docs/native-runner-design.md): `runs-on: buildferry`, with original GitHub steps and results. Isolated live probes passed native execution, failure blocking and cache restore on fresh hosts. Automatic native routing remains under development.
+
 ## Run locally
 
 With Node 24 LTS and pnpm 10.26.1:

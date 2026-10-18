@@ -45,17 +45,36 @@ export function executionCapacity(
     const id = candidate.id.split(":")[1];
     if (candidate.kind === "github") {
       const accountId = Number(id);
-      const spent = periodJobs
-        .filter(
-          (value) => value.accountId === accountId && value.providerId === null,
-        )
-        .reduce(
-          (sum, value) => sum + (value.actualMinutes ?? value.reservedMinutes),
-          0,
-        );
-      if (!eligible.some((worker) => worker.accountId === accountId))
-        candidate.reason =
+      const ownerJobs = periodJobs.filter(
+        (value) => value.accountId === accountId && value.providerId === null,
+      );
+      const spent = ownerJobs.reduce(
+        (sum, value) => sum + (value.actualMinutes ?? value.reservedMinutes),
+        0,
+      );
+      // Potential releases defer paid fallback; they never increase spendable capacity.
+      const unsettled = ownerJobs
+        .filter((value) => value.actualMinutes === null && holdsSlot(value))
+        .reduce((sum, value) => sum + value.reservedMinutes, 0);
+      const slotAvailable = eligible.some(
+        (worker) => worker.accountId === accountId,
+      );
+      if (!slotAvailable)
+        candidate.reason ??=
           "No approved worker slot is available for this project.";
+      if (
+        accounts.find((account) => account.id === accountId)?.settings.state ===
+          "active" &&
+        (candidate.pendingMinutes !== undefined ||
+          !slotAvailable ||
+          unsettled > 0)
+      )
+        candidate.pendingMinutes = Math.max(
+          0,
+          (candidate.pendingMinutes ?? candidate.availableMinutes) -
+            spent +
+            unsettled,
+        );
       candidate.availableMinutes = Math.max(
         0,
         candidate.availableMinutes - spent,

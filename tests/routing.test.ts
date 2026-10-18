@@ -61,6 +61,92 @@ describe("routing priorities and limits", () => {
       ).assignments[0]?.candidateId,
     ).toBe("b");
   });
+  it("balances contributed allowances proportionally across three owners", () => {
+    const result = previewRouting(
+      [
+        candidate({
+          id: "a",
+          availableMinutes: 300,
+          capacityMinutes: 300,
+          concurrency: 20,
+        }),
+        candidate({
+          id: "b",
+          availableMinutes: 200,
+          capacityMinutes: 200,
+          concurrency: 20,
+        }),
+        candidate({
+          id: "c",
+          availableMinutes: 200,
+          capacityMinutes: 200,
+          concurrency: 20,
+        }),
+      ],
+      { ...input, jobs: 7, maxMinutes: 20 },
+    );
+    const counts = result.assignments.reduce<Record<string, number>>(
+      (all, assignment) => {
+        if (assignment.candidateId)
+          all[assignment.candidateId] = (all[assignment.candidateId] ?? 0) + 1;
+        return all;
+      },
+      {},
+    );
+    expect(counts).toEqual({ a: 3, b: 2, c: 2 });
+  });
+  it("accounts for use elsewhere when balancing a shared tier", () => {
+    expect(
+      previewRouting(
+        [
+          candidate({ id: "a", availableMinutes: 150, capacityMinutes: 300 }),
+          candidate({ id: "b", availableMinutes: 180, capacityMinutes: 200 }),
+        ],
+        input,
+      ).assignments[0]?.candidateId,
+    ).toBe("b");
+  });
+  it("queues overflow while free parallel slots are busy", () => {
+    const result = previewRouting(
+      [
+        candidate({ concurrency: 1 }),
+        candidate({
+          id: "paid",
+          kind: "ubicloud",
+          priority: 2,
+          rateMicros: 1000,
+          availableMicros: 100_000,
+        }),
+      ],
+      { ...input, jobs: 2, maxCostMicros: 100_000 },
+    );
+    expect(result.assignments.map((job) => job.candidateId)).toEqual([
+      "one",
+      null,
+    ]);
+    expect(result.assignments[1]?.reason).toContain("Paid runners are on hold");
+    expect(result.estimatedCostMicros).toBe(0);
+  });
+  it("honors an explicitly higher paid tier over pending free capacity", () => {
+    const result = previewRouting(
+      [
+        candidate({
+          priority: 2,
+          pendingMinutes: 100,
+          reason: "Refreshing usage.",
+        }),
+        candidate({
+          id: "paid",
+          kind: "ubicloud",
+          priority: 1,
+          rateMicros: 1000,
+          availableMicros: 100_000,
+        }),
+      ],
+      { ...input, maxCostMicros: 100_000 },
+    );
+    expect(result.assignments[0]?.candidateId).toBe("paid");
+  });
   it("backfills short jobs instead of assuming a large job will finish early", () => {
     const pool = [candidate({ availableMinutes: 10 })];
     expect(previewRouting(pool, input).assignments[0]?.candidateId).toBeNull();
@@ -207,6 +293,22 @@ describe("balanced test groups", () => {
       groups: 2,
     });
     expect(first.groups[0]?.suites).toEqual(["a"]);
+  });
+  it("accepts and partitions a real-sized inventory above 2,000 suites", () => {
+    const inventory = Array.from({ length: 3000 }, (_, index) => ({
+      name: `suite-${index}`,
+      seconds: (index % 17) + 1,
+    }));
+    const parsed = shardInputSchema.parse({ suites: inventory, groups: 3 });
+    const result = planShards(parsed);
+    const assigned = result.groups.flatMap((group) => group.suites);
+    expect(assigned).toHaveLength(inventory.length);
+    expect(new Set(assigned).size).toBe(inventory.length);
+    expect(result.groups.every((group) => group.suites.length > 0)).toBe(true);
+    expect(
+      Math.max(...result.groups.map((group) => group.seconds)) -
+        Math.min(...result.groups.map((group) => group.seconds)),
+    ).toBeLessThanOrEqual(1);
   });
   it.each([
     { suites: [], groups: 2 },

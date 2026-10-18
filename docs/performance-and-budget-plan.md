@@ -2,11 +2,13 @@
 
 This is the next implementation plan, not a statement that these optimizations are already enabled. The objective is the shortest useful feedback time within contributed GitHub allowances and explicit paid limits. Account count alone is not a speed improvement.
 
+The chosen interface is now the [native runner broker](native-runner-design.md). Existing workflow steps and source-repository caches stay in GitHub. The source bridge in step 5 is superseded by native runner labels once the broker passes its acceptance gates. Free-first admission and proportional allowance balancing are implemented and tested; automatic native provisioning and real-project parallel groups remain pending.
+
 ## Starting point
 
 Real private-source build and full active test runs have passed on Ubicloud. Multiple account connections, approved private workers, runtime reservations and bounded paid routing exist. The next contributing owner's worker setup is still pending. Automatic test execution across shards, coverage merging, cache reuse, normalized allowance balancing and original-check integration remain work to do.
 
-The current router ranks eligible accounts by remaining minutes and weight. A temporarily busy or unverified free account can be excluded while a paid provider remains eligible. Completed local minutes are also retained conservatively on top of owner-wide billing, which can understate remaining capacity. Both behaviors need explicit treatment before claiming optimal free-first routing.
+The router now balances the remaining fraction of each owner's contribution and holds paid overflow when compatible higher-priority free capacity is temporarily unavailable. Explicit paid-only benchmark routes and deliberately higher paid tiers retain their configured budgets. Completed local minutes are still retained conservatively on top of owner-wide billing, which can understate remaining capacity. Settlement remains a separate investigation.
 
 ## Operating policy
 
