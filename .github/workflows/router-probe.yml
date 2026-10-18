@@ -7,6 +7,10 @@ on:
         description: Deliberately fail the job to test the dependency gate
         default: false
         type: boolean
+      expect_cache_hit:
+        description: Require the cache saved by the previous successful run at this revision
+        default: false
+        type: boolean
 
 permissions: {}
 
@@ -44,6 +48,24 @@ jobs:
           path: ${{ runner.temp }}/router-proof.txt
           if-no-files-found: error
           retention-days: 1
+      - name: Restore original repository cache
+        id: cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ runner.temp }}/router-cache
+          key: buildferry-auto-probe-v1-${{ github.sha }}
+      - name: Verify cache on this disposable host
+        env:
+          EXPECT_CACHE_HIT: ${{ inputs.expect_cache_hit }}
+          CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          if [[ "$EXPECT_CACHE_HIT" == true ]]; then
+            test "$CACHE_HIT" = true
+            test "$(cat "$RUNNER_TEMP/router-cache/proof.txt")" = 'original repository cache'
+          fi
+          mkdir -p "$RUNNER_TEMP/router-cache"
+          printf 'original repository cache\n' > "$RUNNER_TEMP/router-cache/proof.txt"
       - name: Exercise failure gate
         if: inputs.fail_job
         run: exit 1
