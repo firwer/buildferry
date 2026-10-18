@@ -52,22 +52,26 @@ export async function assertRun(
   run: WorkflowRun,
   token: string,
 ): Promise<void> {
-  if (
-    !job.worker ||
-    run.id !== job.remoteRunId ||
-    run.repository.id !== job.worker.repositoryId ||
-    run.head_sha !== job.worker.sha ||
-    run.event !== "workflow_dispatch" ||
-    ![
+  if (!job.worker) throw new EvidenceError("Missing approved worker identity.");
+  const matches = {
+    run: run.id === job.remoteRunId,
+    repository: run.repository.id === job.worker.repositoryId,
+    revision: run.head_sha === job.worker.sha,
+    event: run.event === "workflow_dispatch",
+    workflow: [
       `.github/workflows/${workerWorkflow}`,
       `.github/workflows/${workerWorkflow}@refs/tags/buildferry-worker-${job.worker.sha}`,
-    ].includes(run.path) ||
-    run.display_title !== `buildferry:${job.id}` ||
-    run.run_attempt !== 1 ||
-    run.actor.id !== (await service.github.botId(token))
-  )
+    ].includes(run.path),
+    request: run.display_title === `buildferry:${job.id}`,
+    attempt: run.run_attempt === 1,
+    actor: run.actor.id === (await service.github.botId(token)),
+  };
+  const mismatches = Object.entries(matches)
+    .filter(([, matches]) => !matches)
+    .map(([field]) => field);
+  if (mismatches.length)
     throw new EvidenceError(
-      "The provider run identity does not match the approved worker. Capacity is held for investigation.",
+      `The provider run identity does not match the approved worker (${mismatches.join(", ")}). Capacity is held for investigation.`,
     );
 }
 

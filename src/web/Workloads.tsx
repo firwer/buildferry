@@ -354,6 +354,11 @@ export function Workloads({ session }: Readonly<{ session: SessionView }>) {
       api(`/api/jobs/${id}/cancel`, jobSchema, "POST", {}),
     onSettled: () => client.invalidateQueries({ queryKey: ["execution"] }),
   });
+  const verifyStop = useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/jobs/${id}/verify-stop`, jobSchema, "POST", {}),
+    onSettled: () => client.invalidateQueries({ queryKey: ["execution"] }),
+  });
   return (
     <>
       <div className="page-heading">
@@ -364,7 +369,7 @@ export function Workloads({ session }: Readonly<{ session: SessionView }>) {
           Existing project checks and release approvals stay in place.
         </p>
       </div>
-      <Failure error={query.error ?? cancel.error} />
+      <Failure error={query.error ?? cancel.error ?? verifyStop.error} />
       {query.isPending && <Busy>Loading workloads</Busy>}
       <section className="panel">
         <div className="section-heading">
@@ -467,6 +472,18 @@ export function Workloads({ session }: Readonly<{ session: SessionView }>) {
               </div>
               <div className="row-actions">
                 {job.url && <External href={job.url}>Open worker log</External>}
+                {canEdit &&
+                  job.state === "failed" &&
+                  !job.cancellationConfirmed &&
+                  job.remoteRunId !== null && (
+                    <button
+                      className="button secondary"
+                      disabled={verifyStop.isPending}
+                      onClick={() => verifyStop.mutate(job.id)}
+                    >
+                      Verify stopped worker
+                    </button>
+                  )}
                 {canEdit &&
                   ["queued", "dispatching", "running"].includes(job.state) && (
                     <button

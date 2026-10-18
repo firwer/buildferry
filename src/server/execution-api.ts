@@ -110,6 +110,13 @@ export function registerExecution(
     if (!job) throw new HttpError(404, "This run was not found.");
     return controller.cancel(job);
   });
+  server.post("/api/jobs/:id/verify-stop", async (request) => {
+    requireOwner(request, context);
+    const { id } = z.object({ id: z.uuid() }).parse(request.params);
+    const job = context.store.get("job", id, jobSchema);
+    if (!job) throw new HttpError(404, "This run was not found.");
+    return controller.verifyStopped(job);
+  });
   server.post("/api/worker/claim", async (request) => identity.claim(request));
   server.post("/api/worker/prepared", async (request) =>
     identity.prepared(request),

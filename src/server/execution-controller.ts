@@ -185,6 +185,59 @@ export class ExecutionController {
     this.service.save(changed);
     return changed;
   }
+  /** Release a held failed run only after fresh provider identity and stop evidence. */
+  async verifyStopped(snapshot: Job): Promise<Job> {
+    const job = this.read(snapshot.id);
+    if (
+      !job?.worker ||
+      job.state !== "failed" ||
+      job.cancellationConfirmed ||
+      job.remoteRunId === null
+    )
+      throw new HttpError(
+        409,
+        "This run has no unresolved worker reservation.",
+      );
+    const token = await this.service.workerToken(job.worker);
+    const run = await this.service.github.request(
+      "GET",
+      `/repos/${job.worker.repository}/actions/runs/${job.remoteRunId}`,
+      token,
+      runSchema,
+    );
+    try {
+      await assertRun(this.service, job, run, token);
+      if (run.status !== "completed")
+        throw new HttpError(
+          409,
+          "GitHub has not confirmed that this worker stopped.",
+        );
+      const report = await this.service.github.request(
+        "GET",
+        `/repos/${job.worker.repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=100`,
+        token,
+        jobsReportSchema,
+      );
+      const accounting =
+        run.conclusion === "cancelled" &&
+        report.total_count === 0 &&
+        report.jobs.length === 0
+          ? { actualMinutes: 0, actualMicros: 0, cancellationConfirmed: true }
+          : workerAccounting(job, run, report).accounting;
+      await this.identity.revoke(job.id);
+      const current = this.read(job.id) ?? job;
+      const confirmed = { ...current, ...accounting };
+      this.service.save(confirmed);
+      this.service.context.store.audit(
+        "GitHub confirmed a failed worker has stopped; its result remains failed.",
+      );
+      return confirmed;
+    } catch (error) {
+      if (error instanceof EvidenceError)
+        throw new HttpError(409, error.message);
+      throw error;
+    }
+  }
   private async locate(job: Job, token: string): Promise<Job> {
     if (job.remoteRunId !== null || !job.worker) return job;
     const created =

@@ -270,7 +270,15 @@ describe("independent provider result verification", () => {
     expect(app.store.get("job", request.id, jobSchema)?.state).toBe("failed");
     expect(checks[0]?.conclusion).toBe("failure");
   });
-  it.each(["actor", "attempt", "worker-sha", "repository"])(
+  it.each([
+    "actor",
+    "attempt",
+    "revision",
+    "repository",
+    "workflow",
+    "request",
+    "run",
+  ])(
     "rejects an untrusted run %s without releasing its uncertain capacity",
     async (field) => {
       const app = await make();
@@ -279,13 +287,17 @@ describe("independent provider result verification", () => {
       const proof = evidence(request);
       if (field === "actor") proof.run.actor.id = 999;
       if (field === "attempt") proof.run.run_attempt = 2;
-      if (field === "worker-sha") proof.run.head_sha = "c".repeat(40);
+      if (field === "revision") proof.run.head_sha = "c".repeat(40);
       if (field === "repository") proof.run.repository.id = 999;
+      if (field === "workflow") proof.run.path = ".github/workflows/other.yml";
+      if (field === "request") proof.run.display_title = "other request";
+      if (field === "run") proof.run.id = 902;
       provider(app, request, proof);
       await app.execution.controller.tick();
       expect(app.store.get("job", request.id, jobSchema)).toMatchObject({
         state: "failed",
         cancellationConfirmed: false,
+        message: expect.stringContaining(`(${field})`),
       });
     },
   );
@@ -308,6 +320,91 @@ describe("independent provider result verification", () => {
       "cancelled",
     );
   });
+  it("rechecks a stopped failed worker without changing its result or dispatching again", async () => {
+    const app = await make();
+    const request = running({ state: "failed", outcome: "failed" });
+    app.service.save(request);
+    provider(app, request, evidence(request));
+    const endpoint = `/api/jobs/${request.id}/verify-stop`;
+    expect(
+      (
+        await app.server.inject({
+          method: "POST",
+          url: endpoint,
+          headers: app.headers,
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.server.inject({
+          method: "POST",
+          url: endpoint,
+          cookies: app.cookies,
+        })
+      ).statusCode,
+    ).toBe(403);
+    app.store.put("account", "2", {
+      ...app.store.get("account", "1", accountSchema),
+      id: 2,
+      login: "member",
+      role: "member",
+    });
+    app.store.saveSession(
+      "member-session",
+      { githubId: 2, csrf: "member-csrf", setup: false },
+      Date.now() + 60_000,
+    );
+    expect(
+      (
+        await app.server.inject({
+          method: "POST",
+          url: endpoint,
+          cookies: { bf_session: "member-session" },
+          headers: { ...app.headers, "x-buildferry-csrf": "member-csrf" },
+        })
+      ).statusCode,
+    ).toBe(403);
+    const confirmed = await app.server.inject({
+      method: "POST",
+      url: endpoint,
+      cookies: app.cookies,
+      headers: app.headers,
+    });
+    expect(confirmed.statusCode).toBe(200);
+    expect(confirmed.json()).toMatchObject({
+      state: "failed",
+      outcome: "failed",
+      cancellationConfirmed: true,
+      actualMinutes: 1,
+    });
+    expect(
+      vi
+        .mocked(app.fetcher)
+        .mock.calls.some(([, init]) => init?.method === "POST"),
+    ).toBe(false);
+    await expect(
+      app.execution.controller.verifyStopped(request),
+    ).rejects.toThrow("no unresolved");
+  });
+  it.each(["running", "identity"])(
+    "retains failed capacity when stop verification finds %s",
+    async (mode) => {
+      const app = await make();
+      const request = running({ state: "failed", outcome: "failed" });
+      app.service.save(request);
+      const proof = evidence(request);
+      if (mode === "running") proof.run.status = "in_progress";
+      else proof.run.actor.id = 999;
+      provider(app, request, proof);
+      await expect(
+        app.execution.controller.verifyStopped(request),
+      ).rejects.toThrow();
+      expect(
+        app.store.get("job", request.id, jobSchema)?.cancellationConfirmed,
+      ).toBe(false);
+    },
+  );
   it("recovers finalization after a service restart and rejects late cancellation", async () => {
     const app = await make();
     const request = running();
