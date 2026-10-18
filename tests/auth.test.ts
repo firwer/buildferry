@@ -64,8 +64,9 @@ describe("GitHub App setup and OAuth", () => {
     expect(prepared.statusCode).toBe(200);
     const form = prepared.json<{
       url: string;
-      manifest: { default_permissions: object };
+      manifest: { default_permissions: object; default_events: string[] };
     }>();
+    expect(form.manifest.default_events).toEqual(["push"]);
     expect(form.manifest.default_permissions).toEqual({
       actions: "write",
       contents: "write",

@@ -96,7 +96,8 @@ function createManifest(context: Context, name: string) {
       metadata: "read",
       plan: "read",
     },
-    default_events: ["installation", "installation_repositories", "push"],
+    // GitHub delivers installation events automatically; listing them rejects setup.
+    default_events: ["push"],
     request_oauth_on_install: false,
   };
 }
