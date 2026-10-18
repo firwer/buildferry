@@ -276,6 +276,11 @@ describe("pinned native launcher installation", () => {
     });
     await expect(provisionNativeWorker(app.service, 1)).rejects.toThrow();
     expect((await provisionNativeWorker(app.service, 1)).nativeSha).toBe(next);
+    expect(app.token).toHaveBeenCalledWith(
+      worker.installationId,
+      worker.repositoryId,
+      { contents: "write", workflows: "write" },
+    );
     expect(commits).toBe(1);
     expect(app.store.get("worker", "1", workerSchema)?.sha).toBe(worker.sha);
   });

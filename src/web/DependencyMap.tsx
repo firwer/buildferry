@@ -157,7 +157,7 @@ export function DependencyMap({
                   <span className="job-node-key">{job.key}</span>
                   <strong>{job.name}</strong>
                   <span className="job-node-runner">
-                    {job.runners.length ? job.runners.join(", ") : "No runner"}
+                    {job.reusable ? "Called workflow" : "Current runner"}
                   </span>
                   <span className="job-node-badges">
                     {job.integrated && (

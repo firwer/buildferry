@@ -4,6 +4,7 @@ export class ProviderError extends Error {
   constructor(
     readonly status: number,
     message = "The provider could not verify this connection. Check its access and try again.",
+    readonly operation?: string,
   ) {
     super(message);
   }

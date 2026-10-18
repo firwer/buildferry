@@ -138,85 +138,93 @@ export async function provisionNativeWorker(
       409,
       "Wait for this account's current runners before updating its launcher.",
     );
-  const token = await service.credentials.token(accountId);
-  const head = await service.github.ref(
-    worker.repository,
-    worker.branch,
-    token,
+  const token = await service.github.token(
+    worker.installationId,
+    worker.repositoryId,
+    { contents: "write", workflows: "write" },
   );
-  const pending = service.context.store.get(
-    "native-worker-update",
-    String(accountId),
-    updateSchema,
-  );
-  if (pending && pending.repositoryId !== worker.repositoryId)
-    throw new HttpError(
-      409,
-      "A launcher update for another worker needs review.",
-    );
-  if (
-    head !== (pending?.before ?? worker.nativeSha ?? worker.sha) &&
-    head !== pending?.next
-  )
-    throw new HttpError(
-      409,
-      "The worker repository changed outside BuildFerry. Review it before updating the launcher.",
-    );
-  let nextSha = pending?.next;
-  if (!nextSha) {
-    const commit = await service.github.request(
-      "GET",
-      `/repos/${worker.repository}/git/commits/${head}`,
+  try {
+    const head = await service.github.ref(
+      worker.repository,
+      worker.branch,
       token,
-      z.object({ tree: z.object({ sha: z.string() }) }),
     );
-    const tree = await service.github.request(
-      "POST",
-      `/repos/${worker.repository}/git/trees`,
-      token,
-      z.object({ sha: z.string() }),
-      {
-        base_tree: commit.tree.sha,
-        tree: nativeWorkerFiles(service.context.config.publicUrl),
-      },
+    const pending = service.context.store.get(
+      "native-worker-update",
+      String(accountId),
+      updateSchema,
     );
-    const next = await service.github.request(
-      "POST",
-      `/repos/${worker.repository}/git/commits`,
-      token,
-      z.object({ sha: z.string() }),
-      {
-        message: "Install BuildFerry native runner launcher",
-        tree: tree.sha,
-        parents: [head],
-      },
-    );
-    nextSha = shaSchema.parse(next.sha);
-    service.context.store.put("native-worker-update", String(accountId), {
-      repositoryId: worker.repositoryId,
-      before: head,
-      next: nextSha,
+    if (pending && pending.repositoryId !== worker.repositoryId)
+      throw new HttpError(
+        409,
+        "A launcher update for another worker needs review.",
+      );
+    if (
+      head !== (pending?.before ?? worker.nativeSha ?? worker.sha) &&
+      head !== pending?.next
+    )
+      throw new HttpError(
+        409,
+        "The worker repository changed outside BuildFerry. Review it before updating the launcher.",
+      );
+    let nextSha = pending?.next;
+    if (!nextSha) {
+      const commit = await service.github.request(
+        "GET",
+        `/repos/${worker.repository}/git/commits/${head}`,
+        token,
+        z.object({ tree: z.object({ sha: z.string() }) }),
+      );
+      const tree = await service.github.request(
+        "POST",
+        `/repos/${worker.repository}/git/trees`,
+        token,
+        z.object({ sha: z.string() }),
+        {
+          base_tree: commit.tree.sha,
+          tree: nativeWorkerFiles(service.context.config.publicUrl),
+        },
+      );
+      const next = await service.github.request(
+        "POST",
+        `/repos/${worker.repository}/git/commits`,
+        token,
+        z.object({ sha: z.string() }),
+        {
+          message: "Install BuildFerry native runner launcher",
+          tree: tree.sha,
+          parents: [head],
+        },
+      );
+      nextSha = shaSchema.parse(next.sha);
+      service.context.store.put("native-worker-update", String(accountId), {
+        repositoryId: worker.repositoryId,
+        before: head,
+        next: nextSha,
+      });
+    }
+    // Record the immutable tag before advancing the branch. Unknown acceptance never forces a ref.
+    await pinNativeTag(service, worker, nextSha, token);
+    if (head !== nextSha)
+      await service.github.request(
+        "PATCH",
+        `/repos/${worker.repository}/git/refs/heads/${encodeURIComponent(worker.branch)}`,
+        token,
+        z.object({ ref: z.string() }),
+        { sha: nextSha, force: false },
+      );
+    const updated = { ...worker, nativeSha: nextSha };
+    service.context.store.transaction(() => {
+      service.context.store.put("worker", String(accountId), updated);
+      service.context.store.remove("native-worker-update", String(accountId));
     });
-  }
-  // Record the immutable tag before advancing the branch. Unknown acceptance never forces a ref.
-  await pinNativeTag(service, worker, nextSha, token);
-  if (head !== nextSha)
-    await service.github.request(
-      "PATCH",
-      `/repos/${worker.repository}/git/refs/heads/${encodeURIComponent(worker.branch)}`,
-      token,
-      z.object({ ref: z.string() }),
-      { sha: nextSha, force: false },
+    service.context.store.audit(
+      `${account.login}'s native runner launcher was installed at a pinned revision.`,
     );
-  const updated = { ...worker, nativeSha: nextSha };
-  service.context.store.transaction(() => {
-    service.context.store.put("worker", String(accountId), updated);
-    service.context.store.remove("native-worker-update", String(accountId));
-  });
-  service.context.store.audit(
-    `${account.login}'s native runner launcher was installed at a pinned revision.`,
-  );
-  return updated;
+    return updated;
+  } finally {
+    await service.github.revoke(token);
+  }
 }
 
 async function pinNativeTag(

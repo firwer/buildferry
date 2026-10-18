@@ -11,6 +11,7 @@ import {
 import { shaSchema, workerSchema } from "../shared/execution.js";
 import { AppGitHub, repositoryDetailSchema } from "./providers/app-github.js";
 import { type Context, HttpError } from "./context.js";
+import { ProviderError } from "./providers/http.js";
 
 const jobInputSchema = z.object({
   name: z.string().optional(),
@@ -301,6 +302,20 @@ export class NativeInventory {
         stored.defaultBranch,
         token,
       );
+      const files = await this.github
+        .request(
+          "GET",
+          `/repos/${stored.repository}/contents/.github/workflows?ref=${headSha}`,
+          token,
+          z.array(z.object({ path: z.string(), type: z.string() })),
+        )
+        .catch((error: Error) => {
+          if (error instanceof ProviderError && error.status === 404) return [];
+          throw error;
+        });
+      const paths = new Set(
+        files.filter((file) => file.type === "file").map((file) => file.path),
+      );
       const workflows: NativeWorkflow[] = [];
       for (let page = 1; page <= 100; page++) {
         const list = await this.github.request(
@@ -310,7 +325,7 @@ export class NativeInventory {
           workflowListSchema,
         );
         for (const workflow of list.workflows) {
-          if (!workflow.path.startsWith(".github/workflows/")) continue;
+          if (!paths.has(workflow.path)) continue;
           const previous = stored.workflows.find(
             (value) => value.id === workflow.id && value.path === workflow.path,
           );

@@ -14,6 +14,7 @@ import {
   type VerifyWorkerIdentity,
 } from "./worker-identity.js";
 import { provisionNativeWorker } from "./native-worker.js";
+import { ProviderError } from "./providers/http.js";
 
 export function registerNative(
   server: FastifyInstance,
@@ -138,9 +139,22 @@ export function registerNative(
       .parse(request.params);
     const active = workerUpdates.get(id);
     if (active) return active;
-    const pending = provisionNativeWorker(execution, id).finally(() =>
-      workerUpdates.delete(id),
-    );
+    const pending = provisionNativeWorker(execution, id)
+      .catch((error: Error) => {
+        if (error instanceof ProviderError) {
+          console.warn("Native runner setup failed", {
+            accountId: id,
+            status: error.status,
+            operation: error.operation ?? "Account authorization",
+          });
+          throw new HttpError(
+            409,
+            "GitHub could not finish runner setup. Check the account's App access and reconnect it if needed.",
+          );
+        }
+        throw error;
+      })
+      .finally(() => workerUpdates.delete(id));
     workerUpdates.set(id, pending);
     return pending;
   });

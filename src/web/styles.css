@@ -1553,6 +1553,10 @@ textarea {
   background: #fff;
   overflow: hidden;
 }
+.mobile-picker {
+  display: none;
+  padding: 0 14px 14px;
+}
 .browser-rail {
   min-width: 0;
   padding: 18px 14px;
@@ -2225,6 +2229,13 @@ textarea {
   }
 }
 @media (max-width: 900px) {
+  .mobile-picker {
+    display: grid;
+    gap: 6px;
+  }
+  .browser-rail .picker-list {
+    display: none;
+  }
   .page-heading.with-action {
     flex-direction: column;
   }

@@ -27,38 +27,58 @@ function RepositoryPicker({
   onSelect: (repository: NativeRepository) => void;
 }>) {
   return (
-    <div className="picker-list" aria-label="Repositories">
-      {repositories.map((repository) => (
-        <button
-          type="button"
-          className={
-            selectedId === repository.id
-              ? "picker-item selected"
-              : "picker-item"
-          }
-          key={repository.id}
-          aria-pressed={selectedId === repository.id}
-          aria-label={"Open " + repository.repository}
-          onClick={() => onSelect(repository)}
+    <>
+      <label className="mobile-picker">
+        <span>Repository</span>
+        <select
+          value={selectedId ?? ""}
+          onChange={(event) => {
+            const next = repositories.find(
+              (item) => item.id === Number(event.target.value),
+            );
+            if (next) onSelect(next);
+          }}
         >
-          <span className="picker-title">
-            <strong>{repository.repository}</strong>
-            {repository.private && (
-              <LockKeyhole size={13} aria-label="Private repository" />
+          {repositories.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.repository}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="picker-list" aria-label="Repositories">
+        {repositories.map((repository) => (
+          <button
+            type="button"
+            className={
+              selectedId === repository.id
+                ? "picker-item selected"
+                : "picker-item"
+            }
+            key={repository.id}
+            aria-pressed={selectedId === repository.id}
+            aria-label={"Open " + repository.repository}
+            onClick={() => onSelect(repository)}
+          >
+            <span className="picker-title">
+              <strong>{repository.repository}</strong>
+              {repository.private && (
+                <LockKeyhole size={13} aria-label="Private repository" />
+              )}
+            </span>
+            <span>
+              {repository.workflows.length} workflow
+              {repository.workflows.length === 1 ? "" : "s"} ·{" "}
+              {repository.defaultBranch}
+            </span>
+            <small>Head {repository.headSha.slice(0, 10)}</small>
+            {repository.error && (
+              <span className="status quiet">Needs attention</span>
             )}
-          </span>
-          <span>
-            {repository.workflows.length} workflow
-            {repository.workflows.length === 1 ? "" : "s"} ·{" "}
-            {repository.defaultBranch}
-          </span>
-          <small>Head {repository.headSha.slice(0, 10)}</small>
-          {repository.error && (
-            <span className="status quiet">Needs attention</span>
-          )}
-        </button>
-      ))}
-    </div>
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -72,35 +92,52 @@ function WorkflowPicker({
   onSelect: (id: number) => void;
 }>) {
   return (
-    <div className="picker-list" aria-label="Workflows">
-      {repository.workflows.map((workflow) => (
-        <button
-          type="button"
-          className={
-            selectedId === workflow.id ? "picker-item selected" : "picker-item"
-          }
-          key={workflow.id}
-          aria-pressed={selectedId === workflow.id}
-          aria-label={"Open " + workflow.name}
-          onClick={() => onSelect(workflow.id)}
+    <>
+      <label className="mobile-picker">
+        <span>Workflow</span>
+        <select
+          value={selectedId ?? ""}
+          onChange={(event) => onSelect(Number(event.target.value))}
         >
-          <span className="picker-title">
-            <strong>{workflow.name}</strong>
-            <span
-              className={workflow.enabled ? "status ready" : "status quiet"}
-            >
-              {workflow.enabled ? "Enabled" : "Paused"}
+          {repository.workflows.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="picker-list" aria-label="Workflows">
+        {repository.workflows.map((workflow) => (
+          <button
+            type="button"
+            className={
+              selectedId === workflow.id
+                ? "picker-item selected"
+                : "picker-item"
+            }
+            key={workflow.id}
+            aria-pressed={selectedId === workflow.id}
+            aria-label={"Open " + workflow.name}
+            onClick={() => onSelect(workflow.id)}
+          >
+            <span className="picker-title">
+              <strong>{workflow.name}</strong>
+              <span
+                className={workflow.enabled ? "status ready" : "status quiet"}
+              >
+                {workflow.enabled ? "Enabled" : "Paused"}
+              </span>
             </span>
-          </span>
-          <span>{workflow.path}</span>
-          <small>
-            {workflow.jobs.length} job{workflow.jobs.length === 1 ? "" : "s"} ·
-            Head {workflow.sha.slice(0, 10)}
-          </small>
-          {workflow.error && <span className="status quiet">Read error</span>}
-        </button>
-      ))}
-    </div>
+            <span>{workflow.path}</span>
+            <small>
+              {workflow.jobs.length} job{workflow.jobs.length === 1 ? "" : "s"}{" "}
+              · Head {workflow.sha.slice(0, 10)}
+            </small>
+            {workflow.error && <span className="status quiet">Read error</span>}
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -121,6 +158,9 @@ export function Repositories({ session }: Readonly<{ session: SessionView }>) {
     null;
   const workflow =
     repository?.workflows.find((item) => item.id === workflowId) ??
+    repository?.workflows.find(
+      (item) => item.path === ".github/workflows/ci.yml",
+    ) ??
     repository?.workflows[0] ??
     null;
   return (

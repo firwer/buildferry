@@ -32,6 +32,7 @@ async function make() {
     inaccessible: false,
     failWorkflow: false,
     removed: false,
+    retired: false,
     files: [workflowContent],
   };
   vi.mocked(inventory.content).mockImplementation(async () => {
@@ -64,12 +65,24 @@ async function make() {
         Authorization: "Bearer source-token",
       });
       return response({
-        total_count: 1,
+        total_count: state.retired ? 2 : 1,
         workflows: [
           { id: 51, path: workflowPath, name: "CI", state: "active" },
+          ...(state.retired
+            ? [
+                {
+                  id: 52,
+                  path: ".github/workflows/deleted.yml",
+                  name: "Deleted trial",
+                  state: "active",
+                },
+              ]
+            : []),
         ],
       });
     }
+    if (url.includes("/contents/.github/workflows?"))
+      return response([{ path: workflowPath, type: "file" }]);
     throw new Error(url);
   });
   return { ...app, inventory, state };
@@ -80,6 +93,14 @@ afterEach(async () => {
 });
 
 describe("actual GitHub workflow discovery", () => {
+  it("excludes deleted workflow history that is absent from the current repository files", async () => {
+    const app = await make();
+    app.state.retired = true;
+    expect((await app.inventory.refreshRepository(101)).workflows).toHaveLength(
+      1,
+    );
+    expect(app.inventory.content).toHaveBeenCalledTimes(1);
+  });
   it("discovers installed repositories, excludes workers, and retains configured overrides", async () => {
     const app = await make();
     app.store.put("native-repository", "101", {

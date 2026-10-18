@@ -65,7 +65,12 @@ export class AppGitHub {
         "GitHub could not be reached. The request remains recorded for reconciliation.",
       );
     }
-    if (!response.ok) throw new ProviderError(response.status);
+    if (!response.ok)
+      throw new ProviderError(
+        response.status,
+        undefined,
+        `${method} ${endpoint}`,
+      );
     if (response.status === 204) return schema.parse(null);
     try {
       const content = await boundedBytes(response, 8_000_000);
