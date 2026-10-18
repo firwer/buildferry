@@ -13,7 +13,11 @@ import {
 } from "../shared/native.js";
 import { api, money, number } from "./api.js";
 import { Busy, Empty, External, Failure } from "./components.js";
-import { nativeQueryKey, useNativeDashboard } from "./native-data.js";
+import {
+  nativeQueryKey,
+  useNativeDashboard,
+  useAccountAccess,
+} from "./native-data.js";
 
 function workerStatus(worker: Worker | undefined) {
   if (!worker?.nativeSha) return "Not installed";
@@ -34,6 +38,7 @@ export function WorkerSetup({
     (value) => value.accountId === own?.id,
   );
   const installLabel = worker?.nativeSha ? "Update runner" : "Install runner";
+  const access = useAccountAccess(own?.id);
   const install = useMutation({
     mutationFn: async () => {
       if (!own) throw new Error("Choose a connected GitHub account.");
@@ -119,21 +124,36 @@ export function WorkerSetup({
       )}
       {session.app && !worker?.nativeSha && (
         <p className="install-link">
-          First, make sure the App has access to the worker repository.{" "}
-          <External href={session.app.installUrl}>
-            Check GitHub App access
+          {access.data?.message ??
+            "Check GitHub App access before installing the runner."}{" "}
+          <External href={access.data?.url ?? session.app.installUrl}>
+            Open GitHub App settings
           </External>
         </p>
+      )}
+      {access.data?.state !== "ready" && (
+        <button
+          className="button secondary"
+          disabled={access.isFetching}
+          onClick={() => access.refetch()}
+        >
+          {access.isFetching ? "Checking access" : "Check access again"}
+        </button>
       )}
       <p className="fine-print">
         Then install the runner here. BuildFerry uses this private repository to
         run jobs on this account's minutes. Your project's workflow stays in its
         original repository.
       </p>
-      <Failure error={native.error ?? install.error} />
+      <Failure error={native.error ?? access.error ?? install.error} />
       <button
         className="button primary"
-        disabled={session.demo || !own || install.isPending}
+        disabled={
+          session.demo ||
+          !own ||
+          install.isPending ||
+          access.data?.state !== "ready"
+        }
         onClick={() => install.mutate()}
       >
         {install.isPending ? <Busy>Installing runner</Busy> : installLabel}

@@ -93,7 +93,7 @@ describe("dashboard journeys", () => {
         passwordHash: scryptSync(password, salt, 64),
       },
     });
-    expect(await screen.findByText("You are all set")).toBeTruthy();
+    expect(await screen.findByText("Finish GitHub setup")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Accounts" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Return to sign in" }));
     await user.type(await screen.findByLabelText("Username"), "admin");

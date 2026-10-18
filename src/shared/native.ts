@@ -132,6 +132,14 @@ export const nativeDashboardSchema = z.object({
 });
 export type NativeDashboard = z.infer<typeof nativeDashboardSchema>;
 
+export const accountAccessSchema = z.object({
+  state: z.enum(["missing", "approval", "ready"]),
+  url: z
+    .url()
+    .refine((value) => new URL(value).origin === "https://github.com"),
+  message: z.string(),
+});
+
 /** An explicit job provider list replaces the workflow list; other fields inherit individually. */
 export function effectivePolicy(
   workflow: NativeWorkflow,

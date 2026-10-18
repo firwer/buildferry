@@ -5,7 +5,14 @@ import {
   nativeWorkflowSettingsSchema,
   nativeLeaseSchema,
 } from "../shared/native.js";
-import { requireOwner, type Context, HttpError } from "./context.js";
+import {
+  requireOwner,
+  requireAccountManager,
+  type Context,
+  HttpError,
+} from "./context.js";
+import { accountSchema } from "../shared/contracts.js";
+import { nativeAccountAccess } from "./native-access.js";
 import type { ExecutionService } from "./execution-service.js";
 import { NativeService } from "./native-service.js";
 import { NativeController } from "./native-controller.js";
@@ -42,6 +49,15 @@ export function registerNative(
   server.get("/api/native", async (request) => {
     requireOwner(request, context);
     return dashboard();
+  });
+  server.get("/api/native/accounts/:id/access", async (request) => {
+    const { id } = z
+      .object({ id: z.coerce.number().int().positive() })
+      .parse(request.params);
+    const account = context.store.get("account", String(id), accountSchema);
+    if (!account) throw new HttpError(404, "This account is not connected.");
+    requireAccountManager(request, context, account);
+    return nativeAccountAccess(context, id);
   });
   server.post("/api/native/refresh", async (request) => {
     requireOwner(request, context);

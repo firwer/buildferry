@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { SessionView } from "../shared/contracts.js";
 import { api } from "./api.js";
 import { Brand, Busy, Failure } from "./components.js";
+import { useAccountAccess } from "./native-data.js";
 
 const manifestResponse = z.object({
   url: z.url(),
@@ -13,6 +14,9 @@ const manifestResponse = z.object({
 });
 
 export function Setup({ session }: Readonly<{ session: SessionView }>) {
+  const access = useAccountAccess(
+    session.stage === "connected" ? session.user?.id : undefined,
+  );
   const client = useQueryClient();
   const [code, setCode] = useState("");
   const [appName, setAppName] = useState("BuildFerry Team");
@@ -166,11 +170,28 @@ export function Setup({ session }: Readonly<{ session: SessionView }>) {
           {session.stage === "connected" && (
             <>
               <span className="step">Account connected</span>
-              <h2>You are all set</h2>
+              <h2>
+                {access.data?.state === "ready"
+                  ? "You are all set"
+                  : "Finish GitHub setup"}
+              </h2>
               <p>
-                Your GitHub account is connected. Your administrator can manage
-                its CI minutes and worker setup. You can close this window.
+                {access.data?.message ??
+                  "Your sign-in is complete. Checking GitHub App access for runner setup."}
               </p>
+              {access.data && access.data.state !== "ready" && (
+                <a className="button primary" href={access.data.url}>
+                  Open GitHub App settings
+                </a>
+              )}
+              <button
+                className="button secondary"
+                disabled={access.isFetching}
+                onClick={() => access.refetch()}
+              >
+                Check access again
+              </button>
+              <Failure error={access.error} />
               <button
                 className="button secondary"
                 onClick={() => logout.mutate()}

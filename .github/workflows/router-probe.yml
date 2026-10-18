@@ -1,0 +1,61 @@
+name: Automatic router smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      fail_job:
+        description: Deliberately fail the job to test the dependency gate
+        default: false
+        type: boolean
+
+permissions: {}
+
+jobs:
+  probe:
+    name: Original job through BuildFerry
+    runs-on:
+      [
+        buildferry,
+        "buildferry-${{ github.run_id }}-${{ github.run_attempt }}-f6257edfbb55-probe--${{ strategy.job-index || 0 }}",
+      ]
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source revision
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Verify source context
+        env:
+          EXPECTED_REPOSITORY: ${{ github.repository }}
+          EXPECTED_SHA: ${{ github.sha }}
+          RUNNER_KIND: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "$EXPECTED_REPOSITORY"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$RUNNER_KIND" = self-hosted
+          printf 'Original source context verified.\n' > "$RUNNER_TEMP/router-proof.txt"
+      - name: Upload source artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: router-proof
+          path: ${{ runner.temp }}/router-proof.txt
+          if-no-files-found: error
+          retention-days: 1
+      - name: Exercise failure gate
+        if: inputs.fail_job
+        run: exit 1
+
+  gate:
+    name: Original dependency gate
+    needs: probe
+    runs-on:
+      [
+        buildferry,
+        "buildferry-${{ github.run_id }}-${{ github.run_attempt }}-f6257edfbb55-gate--${{ strategy.job-index || 0 }}",
+      ]
+    timeout-minutes: 2
+    steps:
+      - run: echo 'Original job and dependency gate passed.'

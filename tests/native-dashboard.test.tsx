@@ -44,6 +44,12 @@ function nativeFetch(state: FetchState) {
     const body =
       typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
     state.requests.push({ path, method, body });
+    if (/\/api\/native\/accounts\/\d+\/access$/.test(path))
+      return json({
+        state: "ready",
+        url: "https://github.com/settings/installations/401",
+        message: "GitHub App access is ready.",
+      });
     if (state.nativeError && path === "/api/native") {
       return json({ error: "Native inventory unavailable." }, 500);
     }

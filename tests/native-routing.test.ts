@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   effectivePolicy,
   nativeRepositorySchema,
@@ -32,6 +33,14 @@ async function requiredLease(app: Awaited<ReturnType<typeof make>>) {
 }
 
 describe("native workflow policies", () => {
+  it("keeps the real automatic smoke test entirely on the router with its dependency gate", () => {
+    const file = ".github/workflows/router-probe.yml";
+    const jobs = workflowJobs(readFileSync(file, "utf8"), file);
+    expect(jobs).toMatchObject([
+      { key: "probe", integrated: true, supported: true, maxMinutes: 2 },
+      { key: "gate", integrated: true, supported: true, needs: ["probe"] },
+    ]);
+  });
   it("loads real dependencies and environments without executing command text", () => {
     const jobs = workflowJobs(workflowContent, workflowPath);
     expect(jobs[0]).toMatchObject({
