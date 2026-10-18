@@ -76,6 +76,11 @@ export class ExecutionService {
       input.repository,
       metadataToken,
     );
+    if (this.workers().some((worker) => worker.repositoryId === repository.id))
+      throw new HttpError(
+        422,
+        "Use a source repository separate from the dedicated CI worker.",
+      );
     const project: Project = {
       ...input,
       repository: repository.full_name,

@@ -77,6 +77,28 @@ function network(
   return fetcher;
 }
 describe("trusted worker launchers", () => {
+  it("revokes source access before checkout can invoke a working-tree filter", async () => {
+    const fetcher = network();
+    mocks.exec.mockImplementation((_binary: string, args: string[]) => {
+      if (args[0] === "checkout")
+        expect(String(fetcher.mock.calls.at(-1)?.[0])).toContain(
+          "/api/worker/prepared",
+        );
+      return args[0] === "rev-parse" ? sha : "";
+    });
+    await import("../src/worker/prepare.js");
+  });
+  it("does not write an executable recipe after a working-tree checkout failure", async () => {
+    network();
+    mocks.exec.mockImplementation((_binary: string, args: string[]) => {
+      if (args[0] === "checkout") throw new Error("Filter failed");
+      return args[0] === "rev-parse" ? sha : "";
+    });
+    await expect(import("../src/worker/prepare.js")).rejects.toThrow(
+      "could not be checked out",
+    );
+    expect(mocks.write).not.toHaveBeenCalled();
+  });
   it("fetches the exact revision with transient authentication and revokes before preserving evidence", async () => {
     const fetcher = network();
     await import("../src/worker/prepare.js");

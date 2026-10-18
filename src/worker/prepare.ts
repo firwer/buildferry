@@ -95,7 +95,7 @@ function git(args: readonly string[], authenticated = false): string {
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
 }
-let checkedOut = false;
+let fetched = false;
 try {
   git(["init"]);
   git([
@@ -105,10 +105,9 @@ try {
     `https://github.com/${claim.sourceRepository}.git`,
   ]);
   git(["fetch", "--no-tags", "--depth=1", "origin", claim.sourceSha], true);
-  git(["checkout", "--detach", "FETCH_HEAD"]);
-  if (git(["rev-parse", "HEAD"]) !== claim.sourceSha)
+  if (git(["rev-parse", "FETCH_HEAD"]) !== claim.sourceSha)
     throw new Error("Checkout does not match the approved revision.");
-  checkedOut = true;
+  fetched = true;
 } catch {
   // Do not expose git's error object, which could contain authentication details.
 }
@@ -118,8 +117,16 @@ if (!revoked.ok)
   throw new Error(
     "Source access could not be revoked. Project code will not run.",
   );
-if (!checkedOut)
+if (!fetched)
   throw new Error("The requested source revision could not be checked out.");
+// Checkout filters must run only after the source credential has been revoked.
+try {
+  git(["checkout", "--detach", claim.sourceSha]);
+  if (git(["rev-parse", "HEAD"]) !== claim.sourceSha)
+    throw new Error("Checkout mismatch");
+} catch {
+  throw new Error("The requested source revision could not be checked out.");
+}
 const workingDirectory = path.resolve(directory, claim.directory);
 if (
   workingDirectory !== directory &&

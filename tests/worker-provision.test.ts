@@ -42,6 +42,15 @@ afterEach(async () => {
 });
 
 describe("owner-approved worker provisioning", () => {
+  it("does not allow an installed worker repository to become a source workload", async () => {
+    const { service } = await make();
+    await expect(
+      service.connectProject(
+        { repository: worker.repository, recipe: project.recipe },
+        1,
+      ),
+    ).rejects.toThrow("separate from the dedicated CI worker");
+  });
   it("updates only the account owner's explicit workload approvals for an existing worker", async () => {
     const { service, fetcher } = await make();
     expect((await service.provisionWorker(1, [])).allowedProjects).toEqual([]);
