@@ -273,6 +273,7 @@ export class ExecutionService {
       remoteRunId: null,
       checkId: null,
       checkSubmittedAt: null,
+      checkStartedAt: null,
       outcome: null,
       period: currentPeriod(),
       reservedMinutes: 0,

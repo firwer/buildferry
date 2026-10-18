@@ -87,6 +87,7 @@ export const jobSchema = z.object({
   remoteRunId: z.number().int().positive().nullable(),
   checkId: z.number().int().positive().nullable(),
   checkSubmittedAt: z.number().nullable(),
+  checkStartedAt: z.number().nullable().default(null),
   outcome: z.enum(["succeeded", "failed", "cancelled"]).nullable(),
   period: z.string(),
   reservedMinutes: z.number().int().nonnegative(),

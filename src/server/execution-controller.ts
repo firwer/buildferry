@@ -327,7 +327,39 @@ export class ExecutionController {
         state: "cancelling",
         message: "Waiting for GitHub to confirm cancellation.",
       });
-    }
+    } else if (run.status === "in_progress") await this.markCheckRunning(job);
+  }
+  /** The progress update is idempotent; only independently verified completion can set a result. */
+  private async markCheckRunning(job: Job): Promise<void> {
+    if (job.checkStartedAt !== null || job.checkId === null) return;
+    const project = this.service.context.store.get(
+      "project",
+      job.projectId,
+      projectSchema,
+    );
+    if (!project)
+      throw new HttpError(
+        409,
+        "Restore the source connection to publish progress.",
+      );
+    const token = await this.service.projectToken(project);
+    await this.service.github.request(
+      "PATCH",
+      `/repos/${project.repository}/check-runs/${job.checkId}`,
+      token,
+      z.object({ id: z.number() }),
+      {
+        status: "in_progress",
+        details_url: job.url ?? undefined,
+        output: {
+          title: "The worker is running",
+          summary:
+            "BuildFerry is waiting for independently verified command results. Existing checks and release approvals remain in place.",
+        },
+      },
+    );
+    const current = this.read(job.id) ?? job;
+    this.service.save({ ...current, checkStartedAt: Date.now() });
   }
   private async admitDispatch(job: Job): Promise<void> {
     try {

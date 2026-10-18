@@ -60,6 +60,7 @@ export function job(overrides: Partial<Job> = {}): Job {
     remoteRunId: null,
     checkId: 501,
     checkSubmittedAt: Date.now(),
+    checkStartedAt: null,
     outcome: null,
     period: currentPeriod(),
     reservedMinutes: 0,

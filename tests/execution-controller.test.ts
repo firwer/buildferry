@@ -5,6 +5,7 @@ import { jobSchema } from "../src/shared/execution.js";
 import { accountSchema } from "../src/shared/contracts.js";
 import { ExecutionController } from "../src/server/execution-controller.js";
 import { WorkerIdentity } from "../src/server/worker-identity.js";
+import type { WorkflowRun } from "../src/server/providers/app-github.js";
 import { workerSteps } from "../src/server/worker-template.js";
 import {
   executionFixture,
@@ -29,7 +30,7 @@ afterEach(async () => {
 function evidence(request: ReturnType<typeof job>) {
   const start = Date.now() - 100_000;
   const iso = (offset: number) => new Date(start + offset).toISOString();
-  const run = {
+  const run: WorkflowRun = {
     id: 901,
     run_attempt: 1,
     head_sha: worker.sha,
@@ -88,7 +89,7 @@ function provider(
   request: ReturnType<typeof job>,
   proof: Proof,
 ) {
-  const checks: { conclusion: string }[] = [];
+  const checks: { status?: string; conclusion?: string }[] = [];
   vi.mocked(app.fetcher).mockImplementation(async (input, init) => {
     const url = String(input);
     if (url.endsWith("/jobs?filter=latest&per_page=100"))
@@ -113,7 +114,12 @@ function provider(
     }
     if (url.endsWith("/cancel")) return new Response(null, { status: 202 });
     if (url.includes("/check-runs/") && init?.method === "PATCH") {
-      checks.push(JSON.parse(String(init.body)) as { conclusion: string });
+      checks.push(
+        JSON.parse(String(init.body)) as {
+          status?: string;
+          conclusion?: string;
+        },
+      );
       return response({ id: request.checkId ?? 501 });
     }
     if (url.endsWith("/actions/runs/901")) return response(proof.run);
@@ -138,6 +144,32 @@ function running(overrides: Partial<ReturnType<typeof job>> = {}) {
 }
 
 describe("independent provider result verification", () => {
+  it("publishes running status once and keeps the result pending until verified completion", async () => {
+    const app = await make();
+    const request = running();
+    const legacy: Partial<typeof request> = { ...request };
+    delete legacy.checkStartedAt;
+    app.store.put("job", request.id, legacy);
+    const proof = evidence(request);
+    proof.run.status = "in_progress";
+    proof.run.conclusion = null;
+    const checks = provider(app, request, proof);
+    await app.execution.controller.tick();
+    await app.execution.controller.tick();
+    expect(checks).toHaveLength(1);
+    expect(checks[0]).toMatchObject({ status: "in_progress" });
+    expect(checks[0]?.conclusion).toBeUndefined();
+    expect(
+      app.store.get("job", request.id, jobSchema)?.checkStartedAt,
+    ).not.toBeNull();
+    proof.run.status = "completed";
+    proof.run.conclusion = "success";
+    await app.execution.controller.tick();
+    expect(checks[1]).toMatchObject({
+      status: "completed",
+      conclusion: "success",
+    });
+  });
   it("admits a fitting workload behind jobs that cannot use current capacity", async () => {
     const app = await make();
     const blocked = Array.from({ length: 6 }, (_, index) =>
@@ -469,6 +501,38 @@ describe("independent provider result verification", () => {
       state: "cancelled",
       cancellationConfirmed: true,
     });
+  });
+  it("can cancel a worker even when its source check cannot be updated", async () => {
+    const app = await make();
+    const request = running();
+    app.service.save(request);
+    const proof = evidence(request);
+    proof.run.status = "in_progress";
+    provider(app, request, proof);
+    const fetcher = vi.mocked(app.fetcher);
+    const original = fetcher.getMockImplementation();
+    if (!original) throw new Error("Missing fixture provider");
+    fetcher.mockImplementation(async (input, init) =>
+      String(input).includes("/check-runs/")
+        ? response({}, 403)
+        : original(input, init),
+    );
+    await app.execution.controller.cancel(request);
+    await app.execution.controller.tick();
+    expect(
+      fetcher.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/cancel") && init?.method === "POST",
+      ),
+    ).toBe(true);
+    expect(
+      fetcher.mock.calls.some(([input]) =>
+        String(input).includes("/check-runs/"),
+      ),
+    ).toBe(false);
+    expect(app.store.get("job", request.id, jobSchema)?.state).toBe(
+      "cancelling",
+    );
   });
   it("reconciles a lost dispatch response by unique run identity without another POST", async () => {
     const app = await make();
