@@ -1,5 +1,15 @@
 # Implementation status
 
+## Native routing update
+
+The repository now contains the automatic native broker, durable host reservations, pinned single-use launchers, GitHub identity verification, actual source-runner assignment checks and restart/cancellation reconciliation. The dashboard starts at Repositories, loads actual workflow jobs and dependencies, and lets one admin save ordered providers and machine overrides at workflow or job level. It no longer presents command recipes, a synthetic routing preview or a test-group planner as the main workflow interface.
+
+GitHub usage attribution prevents completed worker minutes from being subtracted twice when the billing report identifies the worker repository. Missing attribution retains conservative accounting. Native and previous recipe runs share one capacity ledger. All ten Standard/Premium x64 Ubicloud sizes are selectable with configured rates; explicit native family choices are checked before JIT delivery. Paid rates remain estimates and automatic Premium must be disabled in Ubicloud for a Standard choice.
+
+These implementation details are covered by service, bootstrap and UI regression tests. The previously recorded live evidence below remains historical: a second account's ready native launcher, automatic private cross-account execution and matched speed benchmarks still require live acceptance. General Wisbid runner adoption is a separate reviewable workflow change; dedicated production builders and release protections are retained. Automatic Quality sharding is the next experiment, not an implemented speedup.
+
+## Earlier recipe pilot evidence
+
 BuildFerry runs as an independent application on an existing Coolify server over valid HTTPS. Real GitHub App registration, owner and invited-member authorization, current-period billing reads, private worker installation and Ubicloud dispatch have passed live setup. An actual private-source build and full active test command passed independent run, step and audit verification and published successful additional source checks. The first test attempt reached its time limit and correctly failed; its resource-aware retry completed the original active-profile scope, retaining existing skips. The second owner's worker remains pending. No existing Wisbid workflow, worker repository, branch rule, required check, environment approval, database release or deployment has been changed.
 
 The next integration will use native logical runner labels. Real public probes passed original job execution, artifact upload, failure blocking and cache restore on fresh hosts; [native runner design](native-runner-design.md) separates that evidence from the automatic broker still to be implemented. Free-first admission now waits through temporary free shortages, reports why paid runners are held and balances the fraction of each owner's contribution. The test-group planner accepts up to 20,000 suites, with a 3,000-suite regression. Automatic shard execution and coverage aggregation are not enabled.

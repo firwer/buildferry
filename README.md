@@ -6,7 +6,7 @@ BuildFerry routes independent builds and tests across a company's connected GitH
 
 Next: [performance and budget rollout](docs/performance-and-budget-plan.md), covering three or more contributing accounts, free-first queueing, cache reuse, balanced test groups and measured speed-versus-minutes tradeoffs.
 
-The preferred workflow interface is a [native runner broker](docs/native-runner-design.md): `runs-on: buildferry`, with original GitHub steps and results. Isolated live probes passed native execution, failure blocking and cache restore on fresh hosts. Automatic native routing remains under development.
+The [native runner broker](docs/native-runner-design.md) supplies single-use machines for original GitHub jobs. The dashboard discovers repositories, workflows and job dependencies, and saves workflow defaults plus job-specific provider and machine overrides. Standard and Premium x64 Ubicloud machines are selectable. GitHub keeps the original steps, checks, caches, artifacts and release approvals. Native automation has regression coverage; the second account's live worker and private cross-account pilot still need validation. See the [Wisbid concurrency rollout](docs/wisbid-performance-next.md) for test sharding, build and image cache experiments.
 
 ## Run locally
 

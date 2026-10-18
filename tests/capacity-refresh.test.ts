@@ -22,7 +22,9 @@ it("automatically refreshes stale account usage and backs off failed connections
   vi.spyOn(service.credentials, "token").mockResolvedValue(
     "owner-authorization",
   );
-  const usage = vi.spyOn(service.context.github, "usage").mockResolvedValue(50);
+  const usage = vi
+    .spyOn(service.context.github, "usageReport")
+    .mockResolvedValue({ usedMinutes: 50, workerUsedMinutes: null });
   vi.spyOn(service.context.github, "repository").mockResolvedValue();
   const refresher = new CapacityRefresh(service);
   await refresher.run();

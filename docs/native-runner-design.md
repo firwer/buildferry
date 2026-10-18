@@ -1,6 +1,6 @@
 # Native GitHub runner interface
 
-BuildFerry's target integration is a native runner broker. GitHub continues to execute the original workflow; BuildFerry provisions the machine that accepts each job. Account names and provider selection stay in the dashboard.
+BuildFerry implements a native runner broker for trusted Linux x64 jobs. GitHub continues to execute the original workflow; BuildFerry provisions the machine that accepts each job. Account names and provider selection stay in the dashboard. This example uses `.github/workflows/ci.yml`; its path hash prevents equal job keys in different workflows from sharing a runner.
 
 ```yaml
 jobs:
@@ -8,19 +8,19 @@ jobs:
     runs-on:
       [
         buildferry,
-        "buildferry-${{ github.run_id }}-${{ github.run_attempt }}-test",
+        "buildferry-${{ github.run_id }}-${{ github.run_attempt }}-b803fcb7f17e-test--${{ strategy.job-index || 0 }}",
       ]
     # Keep the original steps, permissions, timeouts and test groups.
   build:
     runs-on:
       [
         buildferry,
-        "buildferry-${{ github.run_id }}-${{ github.run_attempt }}-build",
+        "buildferry-${{ github.run_id }}-${{ github.run_attempt }}-b803fcb7f17e-build--${{ strategy.job-index || 0 }}",
       ]
     # Job identity labels contain no account, provider or machine choice.
 ```
 
-These are the intended production labels. The current live application still runs approved command recipes. Only isolated, manually provisioned native probes have run; installing BuildFerry does not yet make these labels available.
+The admin refreshes Repositories, configures each workflow, and installs the native launcher in Accounts before adopting these labels. Workflow routing starts paused and paid limits start at zero. Existing command-recipe execution remains as compatibility support for previous pilot runs. Live public probes proved the inner runner mechanics; automated private cross-owner routing needs its own live acceptance evidence.
 
 ## Workflow and job settings
 
@@ -67,9 +67,9 @@ GitHub documents [ephemeral runners, autoscaling events and registration permiss
 
 ## Permissions and protections
 
-The current GitHub App lacks repository Administration write. Automatic repository-scoped runner registration requires that additional permission. Prepare an explicit permission upgrade and owner approval before enabling native workers; do not quietly widen the installed App's access. Organization-scoped runners use a distinct self-hosted-runner permission, but organization billing is not part of this rollout.
+The GitHub App requests repository Administration write because GitHub bundles native runner registration under that broad permission. Existing installations must explicitly accept the upgrade. BuildFerry uses it only for runner registration, inventory and removal; it does not edit branch rules, environments or repository settings. Repository creation write enables a fresh private worker without manual repository setup. Organization-scoped runners and organization billing are not supported in this rollout.
 
-Initially accept only reviewed project workflows and trusted events. Forks and untrusted jobs keep their established execution path. A worker owner must consent to the source project and native execution policy; approval of an old command recipe is not implicit approval of arbitrary project workflows. Bootstrap credentials must not survive into project commands. The dashboard never runs CI commands locally.
+Accept only reviewed project workflows and trusted same-repository events. Fork jobs keep their established execution path. One company administrator manages routing across accounts whose owners have connected them; there is no per-workload approval ceremony. Bootstrap credentials do not survive into project commands. The dashboard never runs CI commands locally.
 
 Keep existing production jobs and environment gates unchanged during the pilot. A later restricted release profile may supply a machine, while GitHub retains the same environment approvals, trusted workflow, permissions and dependencies. General team workers must not automatically become production workers. No native-runner change applies database DDL, changes a required check or triggers a deployment by itself.
 

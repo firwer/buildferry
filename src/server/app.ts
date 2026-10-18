@@ -21,6 +21,7 @@ import {
 import { equalSecret, nonce } from "./crypto.js";
 import { registerAuth, registerWebhook } from "./auth.js";
 import { registerApi } from "./api.js";
+import { registerNative } from "./native-api.js";
 import { seedDemo } from "./demo.js";
 import { registerExecution } from "./execution-api.js";
 import type { VerifyWorkerIdentity } from "./worker-identity.js";
@@ -117,7 +118,13 @@ export async function createApp(config: Config, options: Options = {}) {
   });
   server.addHook("preHandler", async (request) => {
     const pathname = request.routeOptions.url ?? "";
-    if (["/api/worker/claim", "/api/worker/prepared"].includes(pathname))
+    if (
+      [
+        "/api/worker/claim",
+        "/api/worker/prepared",
+        "/api/native/claim",
+      ].includes(pathname)
+    )
       return;
     if (!pathname.startsWith("/api/") || pathname === "/api/github/webhook")
       return;
@@ -162,6 +169,12 @@ export async function createApp(config: Config, options: Options = {}) {
       options.startController ??
       (process.env.NODE_ENV !== "test" && !config.demo),
   });
+  const native = registerNative(server, context, execution.service, {
+    verifyIdentity: options.verifyWorkerIdentity,
+    startController:
+      options.startController ??
+      (process.env.NODE_ENV !== "test" && !config.demo),
+  });
   await registerWebhook(server, context);
   const webRoot = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -179,7 +192,8 @@ export async function createApp(config: Config, options: Options = {}) {
   server.addHook("onClose", async () => {
     clearInterval(pruning);
     await execution.stop();
+    await native.stop();
     store.close();
   });
-  return { server, store, claimCode, execution };
+  return { server, store, claimCode, execution, native };
 }

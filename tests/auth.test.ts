@@ -66,7 +66,11 @@ describe("GitHub App setup and OAuth", () => {
       url: string;
       manifest: { default_permissions: object; default_events: string[] };
     }>();
-    expect(form.manifest.default_events).toEqual(["push"]);
+    expect(form.manifest.default_events).toEqual([
+      "push",
+      "workflow_job",
+      "workflow_run",
+    ]);
     expect(form.manifest.default_permissions).toEqual({
       actions: "write",
       contents: "write",
@@ -75,6 +79,7 @@ describe("GitHub App setup and OAuth", () => {
       metadata: "read",
       plan: "read",
       repository_creation: "write",
+      administration: "write",
     });
     const state = new URL(form.url).searchParams.get("state") ?? "";
     const conversion = await app.server.inject({

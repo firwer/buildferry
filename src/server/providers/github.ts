@@ -39,6 +39,7 @@ const billingSchema = z.object({
       sku: z.string(),
       quantity: z.number().nonnegative(),
       unitType: z.string(),
+      repositoryName: z.string().nullable().optional(),
     }),
   ),
 });
@@ -115,6 +116,16 @@ export class GitHub {
   }
 
   async usage(login: string, token: string, period: string): Promise<number> {
+    return (await this.usageReport(login, token, period)).usedMinutes;
+  }
+
+  /** Use repository-attributed billing to avoid counting the same worker minute in both ledgers. */
+  async usageReport(
+    login: string,
+    token: string,
+    period: string,
+    workerRepository?: string,
+  ) {
     const [year, month] = period.split("-");
     const report = await this.request(
       `/users/${encodeURIComponent(login)}/settings/billing/usage?year=${year}&month=${Number(month)}`,
@@ -122,6 +133,8 @@ export class GitHub {
       billingSchema,
     );
     let total = 0;
+    let worker = 0;
+    let attributed = Boolean(workerRepository);
     for (const item of report.usageItems) {
       if (
         item.product.toLowerCase() !== "actions" ||
@@ -138,11 +151,20 @@ export class GitHub {
         );
       }
       total += item.quantity;
+      if (!item.repositoryName) attributed = false;
+      if (
+        item.repositoryName?.toLowerCase() ===
+        `${login}/${workerRepository}`.toLowerCase()
+      )
+        worker += item.quantity;
     }
     if (!Number.isFinite(total) || total > 1_000_000)
       throw new ProviderError(422, "The account usage could not be verified.");
     // Billing quantities can include partial minutes; round usage up to preserve the reserve.
-    return Math.ceil(total);
+    return {
+      usedMinutes: Math.ceil(total),
+      workerUsedMinutes: attributed ? Math.floor(worker) : null,
+    };
   }
 
   async repository(

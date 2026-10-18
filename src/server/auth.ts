@@ -96,9 +96,10 @@ function createManifest(context: Context, name: string) {
       metadata: "read",
       plan: "read",
       repository_creation: "write",
+      administration: "write",
     },
     // GitHub delivers installation events automatically; listing them rejects setup.
-    default_events: ["push"],
+    default_events: ["push", "workflow_job", "workflow_run"],
     request_oauth_on_install: false,
   };
 }
@@ -436,6 +437,17 @@ export async function registerWebhook(
                 ...push.data,
                 receivedAt: Date.now(),
               });
+          }
+          if (
+            ["workflow_job", "workflow_run"].includes(
+              String(request.headers["x-github-event"]),
+            )
+          ) {
+            context.store.put("native-event", delivery.data, {
+              event: request.headers["x-github-event"],
+              body: JSON.parse(body.toString("utf8")),
+              receivedAt: Date.now(),
+            });
           }
           context.store.db
             .prepare(

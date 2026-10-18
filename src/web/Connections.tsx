@@ -24,6 +24,7 @@ function ProviderForm({
     provider?.runner ?? "ubicloud-standard-2",
   );
   const [priority, setPriority] = useState(provider?.priority ?? 2);
+  const [family, setFamily] = useState(provider?.family ?? "account");
   const [rates, setRates] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       provider
@@ -49,6 +50,7 @@ function ProviderForm({
         {
           ...(provider ? {} : { projectId, token }),
           runner,
+          family,
           priority,
           rateMicros: Math.round(Number(rates[runner]) * 1_000_000),
           budgetMicros: Math.round(budget * 1_000_000),
@@ -111,11 +113,19 @@ function ProviderForm({
           <span>Default machine</span>
           <select
             value={runner}
-            onChange={(event) => setRunner(event.target.value)}
+            onChange={(event) => {
+              setRunner(event.target.value);
+              setFamily(
+                event.target.value.includes("premium") ? "premium" : "standard",
+              );
+            }}
           >
             {ubicloudMachines.map((machine) => (
               <option key={machine.runner} value={machine.runner}>
                 {machine.label}
+                {family === "account" && machine.runner === runner
+                  ? " (Ubicloud account setting)"
+                  : ""}
               </option>
             ))}
           </select>
@@ -143,10 +153,7 @@ function ProviderForm({
               setRates({ ...rates, [runner]: event.target.value })
             }
           />
-          <small>
-            Use your Ubicloud account's rate for this machine. Its hardware tier
-            is set in Ubicloud.
-          </small>
+          <small>Use your Ubicloud account's rate for this machine.</small>
         </label>
         <details className="full">
           <summary>Other machines for job overrides</summary>
@@ -193,10 +200,8 @@ function ProviderForm({
           <button className="button primary" disabled={connect.isPending}>
             {connect.isPending ? (
               <Busy>Saving settings</Busy>
-            ) : provider ? (
-              "Save settings"
             ) : (
-              "Verify and save connection"
+              <>{provider ? "Save settings" : "Verify and save connection"}</>
             )}
           </button>
         </div>
@@ -226,7 +231,6 @@ export function Connections({
     <section className="panel">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Extra room when you need it</p>
           <h2>Fallback capacity</h2>
         </div>
         {canEdit && (
@@ -300,6 +304,11 @@ export function Connections({
       )}
       <Failure error={refresh.error ?? remove.error} />
       <p className="fine-print">
+        For Standard x64, turn off automatic Premium in Ubicloud's GitHub
+        settings. Native jobs check the supplied hardware before starting. The
+        machine never increases in size automatically.
+      </p>
+      <p className="fine-print">
         Costs use the rates you enter. Install Ubicloud's GitHub runner app on
         each approved worker repository before requesting a run.
       </p>
@@ -320,7 +329,6 @@ export function TeamSettings({ session }: Readonly<{ session: SessionView }>) {
     <section className="panel">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Build together</p>
           <h2>Connect your team</h2>
         </div>
       </div>

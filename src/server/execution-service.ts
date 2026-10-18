@@ -16,7 +16,11 @@ import { HttpError, type Context } from "./context.js";
 import { AppGitHub } from "./providers/app-github.js";
 import { ProviderError } from "./providers/http.js";
 import { currentPeriod, previewRouting } from "./routing.js";
-import { activeJob, executionCapacity } from "./execution-capacity.js";
+import {
+  activeJob,
+  capacityLedger,
+  executionCapacity,
+} from "./execution-capacity.js";
 import { workerFiles, workerWorkflow } from "./worker-template.js";
 import { verifyUbicloudWorker } from "./providers/ubicloud.js";
 
@@ -298,7 +302,7 @@ export class ExecutionService {
     this.context.store.audit(
       `${project.repository}: ${project.recipe.name} was queued for ${sourceSha.slice(0, 12)}.`,
     );
-    return job;
+    return this.context.store.get("job", job.id, jobSchema) ?? job;
   }
 
   /** Persist the check intent first; a lost response is reconciled by its unique external ID. */
@@ -376,7 +380,7 @@ export class ExecutionService {
     return this.context.store.transaction(() => {
       const job = this.context.store.get("job", id, jobSchema);
       if (job?.state !== "queued" || job.checkId === null) return null;
-      const allJobs = this.jobs();
+      const allJobs = capacityLedger(this.context.store);
       const workers = this.workers();
       const accounts = this.context.store.list("account", accountSchema);
       const providers = this.context.store.list("provider", providerSchema);

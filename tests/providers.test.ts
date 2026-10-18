@@ -85,6 +85,33 @@ describe("provider requests", () => {
 });
 
 describe("GitHub usage and repository eligibility", () => {
+  it("credits only the selected worker's attributed minutes and fails conservatively on missing attribution", async () => {
+    const entry = {
+      date: "2026-10-18",
+      product: "Actions",
+      sku: "actions_linux",
+      quantity: 12.5,
+      unitType: "minutes",
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        response({
+          usageItems: [
+            { ...entry, repositoryName: "owner/buildferry-ci" },
+            { ...entry, quantity: 100, repositoryName: "owner/other" },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(response({ usageItems: [entry] }));
+    const github = new GitHub(fetcher);
+    expect(
+      await github.usageReport("owner", "token", "2026-10", "buildferry-ci"),
+    ).toEqual({ usedMinutes: 113, workerUsedMinutes: 12 });
+    expect(
+      await github.usageReport("owner", "token", "2026-10", "buildferry-ci"),
+    ).toEqual({ usedMinutes: 13, workerUsedMinutes: null });
+  });
   const row = {
     date: "2026-10-18",
     product: "Actions",

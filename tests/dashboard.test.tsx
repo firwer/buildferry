@@ -17,7 +17,6 @@ import { api, loadSession } from "../src/web/api.js";
 import { fixture, projectId, response, sampleApp } from "./fixtures.js";
 import { z } from "zod";
 import { scryptSync } from "node:crypto";
-import { project, worker, sourceSha } from "./execution-fixtures.js";
 
 const apps: Awaited<ReturnType<typeof fixture>>[] = [];
 const clients: QueryClient[] = [];
@@ -95,201 +94,35 @@ describe("dashboard journeys", () => {
       },
     });
     expect(await screen.findByText("You are all set")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Team accounts" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Accounts" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Return to sign in" }));
     await user.type(await screen.findByLabelText("Username"), "admin");
     await user.type(screen.getByLabelText("Password"), password);
     await user.click(screen.getByRole("button", { name: /^Sign in$/ }));
     expect(
-      await screen.findByRole("button", { name: "Team accounts" }),
+      await screen.findByRole("button", { name: "Accounts" }),
     ).toBeTruthy();
   });
-  it("shows real empty states and connects an approved workload without seeded runs", async () => {
-    const { user, execution, store } = await mount();
-    vi.spyOn(execution.service.credentials, "token").mockResolvedValue(
-      "owner-user-token",
-    );
-    vi.spyOn(execution.service.github, "installation").mockResolvedValue({
-      id: 201,
-      app_id: 10,
-    });
-    vi.spyOn(execution.service.github, "repository").mockResolvedValue({
-      id: 101,
-      full_name: "owner/source",
-      private: true,
-      archived: false,
-      disabled: false,
-      default_branch: "main",
-      owner: { id: 1, login: "owner" },
-    });
-    await user.click(
-      await screen.findByRole("button", { name: "Workloads and runs" }),
-    );
-    expect(
-      await screen.findByRole("heading", { name: "No runs yet" }),
-    ).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Connect workload" }));
-    await user.type(screen.getByLabelText("Source repository"), "owner/source");
-    await user.type(screen.getByLabelText("Workload name"), "Build");
-    await user.type(
-      screen.getByLabelText(/Approved commands, one per line/),
-      "npm ci\nnpm test",
-    );
-    await user.clear(screen.getByLabelText("Maximum minutes"));
-    await user.type(screen.getByLabelText("Maximum minutes"), "10");
-    await user.click(screen.getByLabelText("Run on default branch updates"));
-    await user.click(screen.getByRole("button", { name: "Save workload" }));
-    expect(
-      await screen.findByRole("button", { name: "Run Build" }),
-    ).toBeTruthy();
-    expect(
-      store.db
-        .prepare("SELECT COUNT(*) AS n FROM records WHERE kind='job'")
-        .get()?.n,
-    ).toBe(0);
-    expect(execution.service.projects()[0]).toMatchObject({
-      repositoryId: 101,
-      recipe: { commands: ["npm ci", "npm test"] },
-      onPush: true,
-    });
-  });
-
-  it("queues a pinned benchmark, preserves the prior recipe on edits and cancels safely", async () => {
-    const providerFetch = vi
-      .fn<typeof fetch>()
-      .mockImplementation(async () => response({ id: 501 }));
-    const { user, execution, store } = await mount(true, providerFetch);
-    store.put("project", project.id, project);
-    vi.spyOn(execution.service.github, "token").mockResolvedValue(
-      "installation-token",
-    );
-    vi.spyOn(execution.service.github, "ref").mockResolvedValue(sourceSha);
-    await user.click(
-      await screen.findByRole("button", { name: "Workloads and runs" }),
-    );
-    await user.click(await screen.findByRole("button", { name: "Run Build" }));
-    await user.type(
-      screen.getByLabelText("Commit revision (optional)"),
-      sourceSha,
-    );
-    await user.selectOptions(screen.getByLabelText("Capacity"), "ubicloud");
-    await user.selectOptions(
-      screen.getByLabelText("Ubicloud machine"),
-      "ubicloud-standard-2",
-    );
-    await user.click(screen.getByRole("button", { name: "Queue run" }));
-    expect(
-      await screen.findByRole("button", { name: "Cancel run" }),
-    ).toBeTruthy();
-    expect(execution.service.jobs()[0]).toMatchObject({
-      sourceSha,
-      route: "ubicloud",
-      state: "queued",
-      ubicloudRunner: "ubicloud-standard-2",
-    });
-    await user.click(screen.getByRole("button", { name: "Edit Build" }));
-    await user.clear(screen.getByLabelText(/Approved commands, one per line/));
-    await user.type(
-      screen.getByLabelText(/Approved commands, one per line/),
-      "npm run build",
-    );
-    await user.selectOptions(
-      screen.getByLabelText("Ubicloud machine"),
-      "ubicloud-standard-4",
-    );
-    await user.click(screen.getByRole("button", { name: "Save workload" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(execution.service.jobs()[0]?.recipe.commands).toEqual([
-      "npm ci",
-      "npm test",
-    ]);
-    expect(execution.service.jobs()[0]?.ubicloudRunner).toBe(
-      "ubicloud-standard-2",
-    );
-    expect(execution.service.projects()[0]?.recipe.ubicloudRunner).toBe(
-      "ubicloud-standard-4",
-    );
-    await user.click(screen.getByRole("button", { name: "Cancel run" }));
-    expect(await screen.findByText("cancelled")).toBeTruthy();
-    expect(execution.service.jobs()[0]).toMatchObject({
-      state: "cancelled",
-      cancellationConfirmed: true,
-    });
-  });
-
-  it("manages the owner's explicit worker approvals", async () => {
-    const { user, store, client, execution } = await mount();
-    store.put("project", project.id, project);
-    const account = store.get("account", "1", accountSchema);
-    if (!account) throw new Error("Missing fixture account");
-    store.put("account", "1", {
-      ...account,
-      settings: { ...account.settings, workerRepository: "buildferry-ci" },
-    });
-    await client.invalidateQueries({ queryKey: ["dashboard"] });
-    const provision = vi
-      .spyOn(execution.service, "provisionWorker")
-      .mockImplementation(async (_id, allowedProjects) => {
-        const changed = { ...worker, allowedProjects: [...allowedProjects] };
-        store.put("worker", "1", changed);
-        return changed;
-      });
-    await user.click(
-      await screen.findByRole("button", { name: "Team accounts" }),
-    );
-    await user.click(await screen.findByLabelText("owner/source / Build"));
-    await user.click(
-      screen.getByRole("button", {
-        name: "Set up worker",
-      }),
-    );
-    expect(
-      await screen.findByRole("button", { name: "Save project approvals" }),
-    ).toBeTruthy();
-    expect(provision).toHaveBeenCalledWith(1, [project.id]);
-    await user.click(screen.getByLabelText("owner/source / Build"));
-    await user.click(
-      screen.getByRole("button", { name: "Save project approvals" }),
-    );
-    await waitFor(() => expect(provision).toHaveBeenLastCalledWith(1, []));
-  });
-  it("navigates the workspace, previews waiting jobs, and retains every planned suite", async () => {
+  it("navigates the four administrator pages without legacy preview tools", async () => {
     const { user } = await mount();
-    await screen.findByRole("heading", { name: /Your team's capacity/ });
-    await user.click(screen.getByRole("button", { name: "Routing preview" }));
-    await user.clear(screen.getByLabelText("Parallel jobs"));
-    await user.type(screen.getByLabelText("Parallel jobs"), "2");
-    await user.clear(screen.getByLabelText("Maximum minutes per job"));
-    await user.type(screen.getByLabelText("Maximum minutes per job"), "5");
-    await user.selectOptions(screen.getByLabelText("Memory per job"), "16");
-    await user.clear(screen.getByLabelText("Total spend limit ($)"));
-    await user.type(screen.getByLabelText("Total spend limit ($)"), "0.2");
-    await user.click(
-      screen.getByRole("button", { name: "Preview assignments" }),
-    );
-    expect((await screen.findAllByText("Waiting for capacity")).length).toBe(2);
-    await user.click(screen.getByText("Why other capacity may be unavailable"));
     expect(
-      screen.getByText("Confirm this account's monthly minutes."),
+      await screen.findByRole("heading", { name: "Repositories", level: 1 }),
     ).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Test planner" }));
-    await user.clear(screen.getByLabelText("Suites and seconds"));
-    await user.type(
-      screen.getByLabelText("Suites and seconds"),
-      "orders.test, 90\nauth.test, 30",
-    );
-    await user.clear(screen.getByLabelText("Parallel groups"));
-    await user.type(screen.getByLabelText("Parallel groups"), "2");
-    await user.click(
-      screen.getByRole("button", { name: "Compare test groups" }),
-    );
-    expect(await screen.findByText("orders.test")).toBeTruthy();
-    expect(screen.getByText("auth.test")).toBeTruthy();
-    expect(screen.getByText("1.5 min of tests in parallel")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Team accounts" }));
-    expect(screen.getByRole("heading", { name: "Team accounts" })).toBeTruthy();
+    for (const label of ["Repositories", "Accounts", "Providers", "Runs"]) {
+      expect(screen.getByRole("button", { name: label })).toBeTruthy();
+    }
+    expect(
+      screen.queryByRole("button", { name: "Routing preview" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Test planner" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Runs" }));
+    expect(
+      await screen.findByRole("heading", { name: "Runs", level: 1 }),
+    ).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: "No native runs yet" }),
+    ).toBeTruthy();
   });
-
   it("claims an installation and prepares the app manifest without exposing credentials", async () => {
     const { user, store } = await mount(false);
     await user.type(await screen.findByLabelText("Setup code"), "wrong");
@@ -340,6 +173,7 @@ describe("dashboard journeys", () => {
       access_token: "test-token",
       expires_at: null,
     });
+    await user.click(await screen.findByRole("button", { name: "Accounts" }));
     await user.click(await screen.findByRole("button", { name: "Edit owner" }));
     await user.click(screen.getByText("Advanced settings"));
     for (const [label, value] of [
@@ -385,9 +219,7 @@ describe("dashboard journeys", () => {
           : response({ id: projectId, name: "Example cloud" }),
       );
     const { user, store } = await mount(true, fetcher);
-    await user.click(
-      await screen.findByRole("button", { name: "Connections" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Providers" }));
     expect(
       screen.getByRole("heading", { name: "Add your fallback provider" }),
     ).toBeTruthy();
@@ -452,26 +284,19 @@ describe("dashboard journeys", () => {
     );
   });
 
-  it("creates a one-use invitation and lets the administrator edit team accounts", async () => {
+  it("lets the administrator edit and disconnect connected accounts", async () => {
     const { user, store } = await mount();
     store.put("account", "2", {
       ...newAccount(2, "teammate", "member"),
       period: currentPeriod(),
     });
-    await user.click(
-      await screen.findByRole("button", { name: "Team accounts" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Create invitation" }));
-    const input = await screen.findByLabelText<HTMLInputElement>(
-      "One-use invitation link",
-    );
+    await user.click(await screen.findByRole("button", { name: "Accounts" }));
     expect(
-      store.hasInvite(new URL(input.value).searchParams.get("invite") ?? ""),
-    ).toBe(true);
-    await user.click(input);
-    expect(input.selectionEnd).toBe(input.value.length);
-    expect(screen.getByRole("button", { name: "Edit teammate" })).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Edit teammate" }));
+      await screen.findByRole("heading", { name: "Accounts", level: 1 }),
+    ).toBeTruthy();
+    await user.click(
+      await screen.findByRole("button", { name: "Edit teammate" }),
+    );
     await user.clear(screen.getByLabelText("Keep for other work"));
     await user.type(screen.getByLabelText("Keep for other work"), "450");
     await user.click(screen.getByRole("button", { name: "Save settings" }));
@@ -490,9 +315,7 @@ describe("dashboard journeys", () => {
 
   it("shows provider errors without hiding the form or its entered values", async () => {
     const { user } = await mount();
-    await user.click(
-      await screen.findByRole("button", { name: "Connections" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Providers" }));
     await user.click(screen.getByRole("button", { name: "Connect Ubicloud" }));
     await user.type(screen.getByLabelText("Project ID"), projectId);
     await user.type(
@@ -517,7 +340,7 @@ describe("dashboard journeys", () => {
 
   it("requires a fresh authenticated session for browser mutations and validates responses", async () => {
     const { store } = await mount();
-    await screen.findByRole("heading", { name: /Your team's capacity/ });
+    await screen.findByRole("heading", { name: "Repositories", level: 1 });
     await loadSession();
     expect(
       await api("/api/invitations", z.object({ url: z.string() }), "POST", {}),

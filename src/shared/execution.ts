@@ -62,6 +62,7 @@ export const workerSchema = z.object({
   ready: z.boolean(),
   createdAt: z.number(),
   allowedProjects: z.array(z.uuid()),
+  nativeSha: shaSchema.optional(),
 });
 export type Worker = z.infer<typeof workerSchema>;
 export const jobSchema = z.object({

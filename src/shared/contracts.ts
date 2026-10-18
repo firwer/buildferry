@@ -31,6 +31,7 @@ export const accountSchema = z.object({
   role: z.enum(["owner", "member"]),
   settings: accountSettingsSchema,
   usedMinutes: minutes.nullable(),
+  workerUsedMinutes: minutes.nullable().optional(),
   period: z.string(),
   verifiedAt: z.number().nullable(),
   repositoryVerified: z.boolean(),
@@ -43,15 +44,29 @@ export const ubicloudRunnerSchema = z.enum([
   "ubicloud-standard-2",
   "ubicloud-standard-4",
   "ubicloud-standard-8",
+  "ubicloud-standard-16",
+  "ubicloud-standard-30",
+  "ubicloud-premium-2",
+  "ubicloud-premium-4",
+  "ubicloud-premium-8",
+  "ubicloud-premium-16",
+  "ubicloud-premium-30",
 ]);
 export type UbicloudRunner = z.infer<typeof ubicloudRunnerSchema>;
 export const ubicloudMachines: ReadonlyArray<{
   runner: UbicloudRunner;
   label: string;
 }> = [
-  { runner: "ubicloud-standard-2", label: "2 CPUs / 8 GB" },
-  { runner: "ubicloud-standard-4", label: "4 CPUs / 16 GB" },
-  { runner: "ubicloud-standard-8", label: "8 CPUs / 32 GB" },
+  { runner: "ubicloud-standard-2", label: "Standard x64 / 2 CPUs / 8 GB" },
+  { runner: "ubicloud-standard-4", label: "Standard x64 / 4 CPUs / 16 GB" },
+  { runner: "ubicloud-standard-8", label: "Standard x64 / 8 CPUs / 32 GB" },
+  { runner: "ubicloud-standard-16", label: "Standard x64 / 16 CPUs / 64 GB" },
+  { runner: "ubicloud-standard-30", label: "Standard x64 / 30 CPUs / 120 GB" },
+  { runner: "ubicloud-premium-2", label: "Premium x64 / 2 CPUs / 8 GB" },
+  { runner: "ubicloud-premium-4", label: "Premium x64 / 4 CPUs / 16 GB" },
+  { runner: "ubicloud-premium-8", label: "Premium x64 / 8 CPUs / 32 GB" },
+  { runner: "ubicloud-premium-16", label: "Premium x64 / 16 CPUs / 64 GB" },
+  { runner: "ubicloud-premium-30", label: "Premium x64 / 30 CPUs / 120 GB" },
 ];
 const runnerRateSchema = z
   .object({
@@ -67,7 +82,8 @@ const providerSettingsFields = {
   priority,
   rateMicros: runnerRateSchema.shape.rateMicros,
   budgetMicros: micros,
-  machineRates: z.array(runnerRateSchema).max(2).optional(),
+  machineRates: z.array(runnerRateSchema).max(9).optional(),
+  family: z.enum(["account", "standard", "premium"]).optional(),
 };
 function uniqueMachineRates(value: {
   runner: UbicloudRunner;

@@ -45,15 +45,19 @@ export async function refreshAccount(
     verifiedAt: null,
     repositoryVerified: false,
     usedMinutes: null,
+    workerUsedMinutes: null,
     period: currentPeriod(),
   };
   try {
     const token = await credentials.token(account.id);
-    updated.usedMinutes = await context.github.usage(
+    const usage = await context.github.usageReport(
       account.login,
       token,
       updated.period,
+      account.settings.workerRepository || undefined,
     );
+    updated.usedMinutes = usage.usedMinutes;
+    updated.workerUsedMinutes = usage.workerUsedMinutes;
     updated.verifiedAt = Date.now();
     if (account.settings.workerRepository) {
       await context.github.repository(

@@ -1,24 +1,54 @@
 import type { Account, Candidate, Provider } from "../shared/contracts.js";
 import type { Job, Worker } from "../shared/execution.js";
+import { nativeLeaseSchema } from "../shared/native.js";
+import { jobSchema } from "../shared/execution.js";
+import type { Store } from "./store.js";
 import { candidatesFor, currentPeriod } from "./routing.js";
 
 export const activeJob = (job: Job) =>
   !["succeeded", "failed", "cancelled"].includes(job.state);
-export const holdsSlot = (job: Job) =>
-  job.accountId !== null && !job.cancellationConfirmed;
+export type CapacityLedger = Pick<
+  Job,
+  | "accountId"
+  | "providerId"
+  | "period"
+  | "cancellationConfirmed"
+  | "actualMinutes"
+  | "reservedMinutes"
+  | "actualMicros"
+  | "reservedMicros"
+>;
+export type CapacityDemand = Pick<Job, "projectId" | "ubicloudRunner"> & {
+  recipe: Pick<
+    Job["recipe"],
+    "maxMinutes" | "memoryGiB" | "maxCostMicros" | "ubicloudRunner"
+  >;
+  nativeRepositoryId?: number;
+};
+export const holdsSlot = (
+  job: Pick<CapacityLedger, "accountId" | "cancellationConfirmed">,
+) => job.accountId !== null && !job.cancellationConfirmed;
+
+/** Recipe and native workers share one ledger, so neither path can double-spend free minutes or slots. */
+export const capacityLedger = (store: Store): CapacityLedger[] => [
+  ...store.list("job", jobSchema),
+  ...store.list("native-lease", nativeLeaseSchema),
+];
 
 /** Admission uses current owner consent and the immutable, separately approved worker. */
 export function eligibleWorkers(
-  job: Job,
+  job: CapacityDemand,
   workers: readonly Worker[],
   accounts: readonly Account[],
-  jobs: readonly Job[],
+  jobs: readonly CapacityLedger[],
 ): Worker[] {
   return workers.filter((worker) => {
     const account = accounts.find((value) => value.id === worker.accountId);
     return (
       worker.ready &&
-      worker.allowedProjects.includes(job.projectId) &&
+      (job.nativeRepositoryId
+        ? Boolean(worker.nativeSha)
+        : worker.allowedProjects.includes(job.projectId)) &&
       account?.settings.state === "active" &&
       account.repositoryVerified &&
       worker.repository.toLowerCase() ===
@@ -31,11 +61,11 @@ export function eligibleWorkers(
 
 /** Unsettled reservations stay charged locally even when provider billing has not caught up. */
 export function executionCapacity(
-  job: Job,
+  job: CapacityDemand,
   workers: readonly Worker[],
   accounts: readonly Account[],
   providers: readonly Provider[],
-  jobs: readonly Job[],
+  jobs: readonly CapacityLedger[],
 ): { candidates: Candidate[]; eligible: Worker[] } {
   const eligible = eligibleWorkers(job, workers, accounts, jobs);
   const periodJobs = jobs.filter(
@@ -57,6 +87,13 @@ export function executionCapacity(
         (sum, value) => sum + (value.actualMinutes ?? value.reservedMinutes),
         0,
       );
+      const account = accounts.find((value) => value.id === accountId);
+      const reported = Math.min(
+        account?.workerUsedMinutes ?? 0,
+        account?.usedMinutes ?? 0,
+      );
+      const unbilled = Math.max(0, spent - reported);
+      const contributed = Math.max(spent, reported);
       // Potential releases defer paid fallback; they never increase spendable capacity.
       const unsettled = ownerJobs
         .filter((value) => value.actualMinutes === null && holdsSlot(value))
@@ -76,13 +113,21 @@ export function executionCapacity(
       )
         candidate.pendingMinutes = Math.max(
           0,
-          (candidate.pendingMinutes ?? candidate.availableMinutes) -
-            spent +
-            unsettled,
+          Math.min(
+            (candidate.pendingMinutes ?? candidate.availableMinutes) -
+              unbilled +
+              unsettled,
+            (account?.settings.contributionMinutes ?? 0) -
+              contributed +
+              unsettled,
+          ),
         );
       candidate.availableMinutes = Math.max(
         0,
-        candidate.availableMinutes - spent,
+        Math.min(
+          candidate.availableMinutes - unbilled,
+          (account?.settings.contributionMinutes ?? 0) - contributed,
+        ),
       );
       candidate.concurrency = 1;
     } else {

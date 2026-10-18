@@ -6,6 +6,7 @@ export default ts.config(
   {
     ignores: [
       "dist/**",
+      ".pnpm-store/**",
       "coverage/**",
       ".data/**",
       ".cache/**",
