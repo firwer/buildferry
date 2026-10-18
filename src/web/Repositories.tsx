@@ -146,6 +146,7 @@ export function Repositories({ session }: Readonly<{ session: SessionView }>) {
   const query = useNativeDashboard();
   const [repositoryId, setRepositoryId] = useState<number | null>(null);
   const [workflowId, setWorkflowId] = useState<number | null>(null);
+  const [compact, setCompact] = useState(false);
   const refresh = useMutation({
     mutationFn: () =>
       api("/api/native/refresh", nativeDashboardSchema, "POST", {}),
@@ -206,80 +207,104 @@ export function Repositories({ session }: Readonly<{ session: SessionView }>) {
         </Empty>
       )}
       {repository && (
-        <div className="repository-browser">
-          <section
-            className="browser-rail"
-            aria-labelledby="repository-heading"
+        <>
+          <div className="browser-toolbar">
+            <button
+              type="button"
+              className="button secondary"
+              aria-expanded={!compact}
+              aria-controls="repository-navigation"
+              onClick={() => setCompact(!compact)}
+            >
+              {compact
+                ? "Expand repositories and workflows"
+                : "Collapse repositories and workflows"}
+            </button>
+          </div>
+          <div
+            className={
+              compact ? "repository-browser compact" : "repository-browser"
+            }
           >
-            <div className="rail-heading">
-              <h2 id="repository-heading">Repositories</h2>
-              <span>{repositories.length}</span>
+            <div className="browser-navigation" id="repository-navigation">
+              <section
+                className="browser-rail"
+                aria-labelledby="repository-heading"
+              >
+                <div className="rail-heading">
+                  <h2 id="repository-heading">Repositories</h2>
+                  <span>{repositories.length}</span>
+                </div>
+                <RepositoryPicker
+                  repositories={repositories}
+                  selectedId={repository.id}
+                  onSelect={(next) => {
+                    setRepositoryId(next.id);
+                    setWorkflowId(null);
+                  }}
+                />
+              </section>
+              <section
+                className="browser-rail"
+                aria-labelledby="workflow-heading"
+              >
+                <div className="rail-heading">
+                  <h2 id="workflow-heading">Workflows</h2>
+                  <span>{repository.workflows.length}</span>
+                </div>
+                {repository.error && (
+                  <p className="inline-note" role="alert">
+                    {repository.error}
+                  </p>
+                )}
+                {repository.workflows.length ? (
+                  <WorkflowPicker
+                    repository={repository}
+                    selectedId={workflow?.id ?? null}
+                    onSelect={setWorkflowId}
+                  />
+                ) : (
+                  <p className="empty-inline">No workflows found.</p>
+                )}
+              </section>
             </div>
-            <RepositoryPicker
-              repositories={repositories}
-              selectedId={repository.id}
-              onSelect={(next) => {
-                setRepositoryId(next.id);
-                setWorkflowId(null);
-              }}
-            />
-          </section>
-          <section className="browser-rail" aria-labelledby="workflow-heading">
-            <div className="rail-heading">
-              <h2 id="workflow-heading">Workflows</h2>
-              <span>{repository.workflows.length}</span>
-            </div>
-            {repository.error && (
-              <p className="inline-note" role="alert">
-                {repository.error}
-              </p>
-            )}
-            {repository.workflows.length ? (
-              <WorkflowPicker
-                repository={repository}
-                selectedId={workflow?.id ?? null}
-                onSelect={setWorkflowId}
-              />
-            ) : (
-              <p className="empty-inline">No workflows found.</p>
-            )}
-          </section>
-          <section className="browser-detail" aria-label="Workflow details">
-            {workflow ? (
-              <WorkflowDetail
-                key={repository.id + ":" + workflow.id}
-                repository={repository}
-                workflow={workflow}
-              />
-            ) : (
-              <div className="detail-placeholder">
-                <FolderGit2 size={26} aria-hidden="true" />
-                <h2>{repository.repository}</h2>
-                <p>
-                  Select a workflow to inspect its jobs and routing settings.
-                </p>
-                <dl className="repository-facts">
-                  <div>
-                    <dt>Branch</dt>
-                    <dd>{repository.defaultBranch}</dd>
-                  </div>
-                  <div>
-                    <dt>Head</dt>
-                    <dd>{repository.headSha.slice(0, 12)}</dd>
-                  </div>
-                  <div>
-                    <dt>Installation</dt>
-                    <dd>#{repository.installationId}</dd>
-                  </div>
-                  <div>
-                    <dt>Refreshed</dt>
-                    <dd>{dateLabel(repository.refreshedAt)}</dd>
-                  </div>
-                </dl>
-              </div>
-            )}
-          </section>
-        </div>
+            <section className="browser-detail" aria-label="Workflow details">
+              {workflow ? (
+                <WorkflowDetail
+                  key={repository.id + ":" + workflow.id}
+                  repository={repository}
+                  workflow={workflow}
+                />
+              ) : (
+                <div className="detail-placeholder">
+                  <FolderGit2 size={26} aria-hidden="true" />
+                  <h2>{repository.repository}</h2>
+                  <p>
+                    Select a workflow to inspect its jobs and routing settings.
+                  </p>
+                  <dl className="repository-facts">
+                    <div>
+                      <dt>Branch</dt>
+                      <dd>{repository.defaultBranch}</dd>
+                    </div>
+                    <div>
+                      <dt>Head</dt>
+                      <dd>{repository.headSha.slice(0, 12)}</dd>
+                    </div>
+                    <div>
+                      <dt>Installation</dt>
+                      <dd>#{repository.installationId}</dd>
+                    </div>
+                    <div>
+                      <dt>Refreshed</dt>
+                      <dd>{dateLabel(repository.refreshedAt)}</dd>
+                    </div>
+                  </dl>
+                </div>
+              )}
+            </section>
+          </div>
+        </>
       )}
     </>
   );

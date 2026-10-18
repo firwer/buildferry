@@ -143,7 +143,9 @@ describe("native repository workflow UI", () => {
         name: /Build job\. Needs checkout\. Native integration connected\./,
       }),
     ).toBeTruthy();
-    expect(screen.getAllByText("Native connected").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("BuildFerry runner").length).toBeGreaterThan(0);
+    for (const badge of screen.getAllByText("Not using BuildFerry"))
+      expect(badge.className).toContain("unrouted");
     expect(screen.getAllByText("Reusable workflow").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Unsupported").length).toBeGreaterThan(0);
     expect(screen.getByText("Env: production")).toBeTruthy();
@@ -157,6 +159,28 @@ describe("native repository workflow UI", () => {
         "This job needs a different operating system or processor.",
       ).length,
     ).toBeGreaterThan(0);
+  });
+
+  it("collapses the navigation lists while retaining repository and workflow selection", async () => {
+    const state: FetchState = {
+      dashboard: nativeDashboardFixture(),
+      requests: [],
+    };
+    const { user } = mount(<Repositories session={nativeSession} />, state);
+    const toggle = await screen.findByRole("button", {
+      name: "Collapse repositories and workflows",
+    });
+    await user.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.querySelector(".repository-browser.compact")).toBeTruthy();
+    expect(screen.getByLabelText<HTMLSelectElement>("Repository").value).toBe(
+      "101",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Expand repositories and workflows" }),
+    );
+    expect(document.querySelector(".repository-browser.compact")).toBeNull();
+    expect(screen.getByRole("heading", { name: "CI", level: 2 })).toBeTruthy();
   });
 
   it("saves ordered workflow defaults and preserves existing job overrides", async () => {
@@ -310,7 +334,7 @@ describe("native repository workflow UI", () => {
       state,
     );
     expect(await screen.findByText("Ready")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Install runner" }));
+    await user.click(screen.getByRole("button", { name: "Update runner" }));
     await waitFor(() =>
       expect(
         state.requests.some(

@@ -161,10 +161,12 @@ export function DependencyMap({
                   </span>
                   <span className="job-node-badges">
                     {job.integrated && (
-                      <span className="badge connected">Connected</span>
+                      <span className="badge connected">BuildFerry runner</span>
                     )}
                     {!job.integrated && (
-                      <span className="badge">Not connected</span>
+                      <span className="badge unrouted">
+                        Not using BuildFerry
+                      </span>
                     )}
                     {job.reusable && (
                       <span className="badge warning">Reusable</span>

@@ -244,14 +244,15 @@ describe("pinned native launcher installation", () => {
     let commits = 0;
     let fail = true;
     app.ref.mockImplementation(async (_repo, ref) => {
-      if (ref.startsWith("buildferry-native-")) {
-        if (!tagged) throw new ProviderError(404);
-        return next;
-      }
+      if (ref.startsWith("buildferry-native-")) throw new ProviderError(422);
       return head;
     });
     vi.mocked(app.fetcher).mockImplementation(async (input, init) => {
       const url = String(input);
+      if (url.includes("/git/ref/tags/buildferry-native-"))
+        return tagged
+          ? response({ object: { type: "commit", sha: next } })
+          : response({ message: "Not Found" }, 404);
       if (url.includes("/git/commits/") && init?.method === "GET")
         return response({ tree: { sha: head } });
       if (url.endsWith("/git/trees")) return response({ sha: next });

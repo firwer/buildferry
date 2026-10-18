@@ -236,7 +236,16 @@ async function pinNativeTag(
   const tag = `buildferry-native-${nextSha}`;
   let exists = false;
   try {
-    if ((await service.github.ref(worker.repository, tag, token)) !== nextSha)
+    // The commit lookup returns 422 for a missing tag; the exact ref API returns 404.
+    const ref = await service.github.request(
+      "GET",
+      `/repos/${worker.repository}/git/ref/tags/${tag}`,
+      token,
+      z.object({
+        object: z.object({ type: z.literal("commit"), sha: shaSchema }),
+      }),
+    );
+    if (ref.object.sha !== nextSha)
       throw new HttpError(409, "The pinned native launcher tag changed.");
     exists = true;
   } catch (error) {

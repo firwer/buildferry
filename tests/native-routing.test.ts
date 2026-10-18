@@ -110,6 +110,36 @@ describe("native workflow policies", () => {
 });
 
 describe("native runner admission", () => {
+  it("admits newly sharded jobs from the trusted run revision without rewriting the default-branch map", async () => {
+    const app = await make();
+    vi.mocked(app.native.service.inventory.content).mockResolvedValue({
+      content: workflowContent
+        .replace("    test:", "    quality-shard:")
+        .replace("  test:", "  quality-shard:")
+        .replaceAll("-test--", "-quality-shard--"),
+      sha: app.state.job.head_sha,
+    });
+    app.state.job.labels = [
+      "buildferry",
+      `${demandLabel(workflowPath, "quality-shard", 601, 1)}--1`,
+    ];
+    const lease = await requiredLease(app);
+    expect(lease).toMatchObject({
+      jobKey: "quality-shard",
+      policy: { maxMinutes: 10, maxCostMicros: 0 },
+    });
+    expect(
+      app.native.service
+        .repository(101)
+        .workflows[0]?.jobs.some((value) => value.key === "quality-shard"),
+    ).toBe(false);
+    const other = await make();
+    other.state.job.labels = [
+      "buildferry",
+      `${demandLabel(workflowPath, "undeclared", 601, 1)}--0`,
+    ];
+    expect(await other.enqueue()).toBeNull();
+  });
   it("does not count attributed worker usage twice while still enforcing the account's contribution", async () => {
     const app = await make();
     const account = app.store.get("account", "1", accountSchema);

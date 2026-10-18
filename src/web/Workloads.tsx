@@ -33,6 +33,7 @@ export function WorkerSetup({
   const worker = native.data?.workers.find(
     (value) => value.accountId === own?.id,
   );
+  const installLabel = worker?.nativeSha ? "Update runner" : "Install runner";
   const install = useMutation({
     mutationFn: async () => {
       if (!own) throw new Error("Choose a connected GitHub account.");
@@ -63,10 +64,10 @@ export function WorkerSetup({
     <section className="panel">
       <div className="section-heading">
         <div>
-          <h2>Runner setup</h2>
+          <h2>2. Set up runners</h2>
           <p>
-            Install the native launcher in the selected account's private worker
-            repository.
+            Choose a connected account, then install its runner. Do this once
+            per account.
           </p>
         </div>
         <span
@@ -105,16 +106,8 @@ export function WorkerSetup({
           </strong>
         </div>
         <div>
-          <span>Branch</span>
-          <strong>{worker?.branch ?? "main"}</strong>
-        </div>
-        <div>
-          <span>Launcher commit</span>
-          <strong>
-            {worker?.nativeSha
-              ? worker.nativeSha.slice(0, 12)
-              : "Not installed"}
-          </strong>
+          <span>Runner</span>
+          <strong>{worker?.nativeSha ? "Installed" : "Not installed"}</strong>
         </div>
       </div>
       {worker && (
@@ -124,16 +117,18 @@ export function WorkerSetup({
           </External>
         </p>
       )}
-      {session.app && (
+      {session.app && !worker?.nativeSha && (
         <p className="install-link">
+          First, make sure the App has access to the worker repository.{" "}
           <External href={session.app.installUrl}>
-            Manage GitHub App access
+            Check GitHub App access
           </External>
         </p>
       )}
       <p className="fine-print">
-        The native launcher installs or upgrades from the selected account. No
-        project recipe is required.
+        Then install the runner here. BuildFerry uses this private repository to
+        run jobs on this account's minutes. Your project's workflow stays in its
+        original repository.
       </p>
       <Failure error={native.error ?? install.error} />
       <button
@@ -141,7 +136,7 @@ export function WorkerSetup({
         disabled={session.demo || !own || install.isPending}
         onClick={() => install.mutate()}
       >
-        {install.isPending ? <Busy>Installing runner</Busy> : "Install runner"}
+        {install.isPending ? <Busy>Installing runner</Busy> : installLabel}
       </button>
     </section>
   );

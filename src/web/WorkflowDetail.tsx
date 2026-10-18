@@ -17,8 +17,8 @@ import { JobOverridePanel, WorkflowPolicyForm } from "./RoutePolicyEditor.js";
 function JobBadges({ job }: Readonly<{ job: NativeWorkflow["jobs"][number] }>) {
   return (
     <span className="job-badges">
-      <span className={job.integrated ? "badge connected" : "badge"}>
-        {job.integrated ? "Native connected" : "Native not connected"}
+      <span className={job.integrated ? "badge connected" : "badge unrouted"}>
+        {job.integrated ? "BuildFerry runner" : "Not using BuildFerry"}
       </span>
       {job.reusable && <span className="badge warning">Reusable workflow</span>}
       {!job.supported && !job.reusable && (
@@ -268,8 +268,8 @@ function JobFacts({ job }: Readonly<{ job: NativeWorkflow["jobs"][number] }>) {
         <dd>{job.environment ?? "None"}</dd>
       </div>
       <div>
-        <dt>Native integration</dt>
-        <dd>{job.integrated ? "Connected" : "Not connected"}</dd>
+        <dt>Routing</dt>
+        <dd>{job.integrated ? "BuildFerry runner" : "Not using BuildFerry"}</dd>
       </div>
       <div>
         <dt>Workflow type</dt>

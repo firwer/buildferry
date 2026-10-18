@@ -135,8 +135,8 @@ function DashboardView({ session }: Readonly<{ session: SessionView }>) {
               {query.data && (
                 <>
                   <Accounts data={query.data} session={session} />
-                  <WorkerSetup data={query.data} session={session} />
                   <TeamSettings session={session} />
+                  <WorkerSetup data={query.data} session={session} />
                 </>
               )}
             </>

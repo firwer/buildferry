@@ -13,6 +13,7 @@ import {
   NativeInventory,
   demandLabel,
   workflowJobs,
+  workflowKey,
 } from "./native-inventory.js";
 import type { ExecutionService } from "./execution-service.js";
 import { capacityLedger, executionCapacity } from "./execution-capacity.js";
@@ -163,17 +164,30 @@ export class NativeService {
         ].includes(run.event)
       )
         return null;
-      const matches = repository.workflows
-        .flatMap((workflow) =>
-          workflow.enabled && !workflow.error
-            ? workflow.jobs
-                .filter((candidate) => candidate.supported)
-                .map((candidate) => ({ workflow, candidate }))
-            : [],
-        )
-        .filter(({ workflow, candidate }) => {
+      const matches = repository.workflows.filter(
+        (workflow) =>
+          workflow.enabled &&
+          !workflow.error &&
+          job.labels.some((label) =>
+            label.startsWith(
+              `buildferry-${run.id}-${run.run_attempt}-${workflowKey(workflow.path)}-`,
+            ),
+          ),
+      );
+      if (matches.length !== 1) return null;
+      const match = matches[0];
+      if (!match) return null;
+      // Validate the actual run's file, including PR revisions, without translating any command steps.
+      const file = await this.inventory.content(
+        repository,
+        match.path,
+        job.head_sha,
+        token,
+      );
+      const declaredJobs = workflowJobs(file.content, match.path).filter(
+        (candidate) => {
           const prefix = demandLabel(
-            workflow.path,
+            match.path,
             candidate.key,
             run.id,
             run.run_attempt,
@@ -184,27 +198,17 @@ export class NativeService {
               (label.startsWith(`${prefix}--`) &&
                 /^\d+$/.test(label.slice(prefix.length + 2))),
           );
-        });
-      if (matches.length !== 1) return null;
-      const match = matches[0];
-      if (!match) return null;
-      // Validate the actual run's file, including PR revisions, without translating any command steps.
-      const file = await this.inventory.content(
-        repository,
-        match.workflow.path,
-        job.head_sha,
-        token,
+        },
       );
-      const declared = workflowJobs(file.content, match.workflow.path).find(
-        (candidate) => candidate.key === match.candidate.key,
-      );
+      if (declaredJobs.length !== 1) return null;
+      const declared = declaredJobs[0];
       if (
         !declared?.supported ||
         !declared.integrated ||
         (declared.matrix && !job.labels.some((label) => /--\d+$/.test(label)))
       )
         return null;
-      const configured = effectivePolicy(match.workflow, declared.key);
+      const configured = effectivePolicy(match, declared.key);
       const policy = {
         ...configured,
         maxMinutes: Math.min(
@@ -215,8 +219,8 @@ export class NativeService {
       const lease: NativeLease = {
         id: randomUUID(),
         repositoryId,
-        workflowId: match.workflow.id,
-        workflowPath: match.workflow.path,
+        workflowId: match.id,
+        workflowPath: match.path,
         jobKey: declared.key,
         jobName: job.name,
         sourceJobId: job.id,

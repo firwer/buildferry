@@ -11,7 +11,7 @@ import {
   type SessionView,
 } from "../shared/contracts.js";
 import { api, money } from "./api.js";
-import { Busy, Dialog, Empty, External, Failure } from "./components.js";
+import { Busy, Dialog, Empty, Failure } from "./components.js";
 
 function ProviderForm({
   provider,
@@ -24,7 +24,9 @@ function ProviderForm({
     provider?.runner ?? "ubicloud-standard-2",
   );
   const [priority, setPriority] = useState(provider?.priority ?? 2);
-  const [family, setFamily] = useState(provider?.family ?? "account");
+  const [family, setFamily] = useState(
+    provider ? (provider.family ?? "account") : "standard",
+  );
   const [rates, setRates] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       provider
@@ -329,13 +331,13 @@ export function TeamSettings({ session }: Readonly<{ session: SessionView }>) {
     <section className="panel">
       <div className="section-heading">
         <div>
-          <h2>Connect your team</h2>
+          <h2>1. Connect accounts</h2>
         </div>
       </div>
       <p className="panel-intro">
-        Each person connects their GitHub account once. You manage its minutes,
-        reserve and worker here. Invitation links expire in one hour and can be
-        used once.
+        Already listed above? Continue to runner setup below. To add someone,
+        send them an invitation. Each person signs in once; you manage their
+        minutes and limits here. Invitations last one hour.
       </p>
       {session.user?.role === "owner" && (
         <button
@@ -363,13 +365,6 @@ export function TeamSettings({ session }: Readonly<{ session: SessionView }>) {
             onFocus={(event) => event.target.select()}
           />
         </label>
-      )}
-      {session.app && (
-        <p className="install-link">
-          <External href={session.app.installUrl}>
-            Manage GitHub repository access
-          </External>
-        </p>
       )}
     </section>
   );
