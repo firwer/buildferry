@@ -65,7 +65,9 @@ export async function createApp(config: Config, options: Options = {}) {
   };
   if (config.demo) seedDemo(store);
   const claimCode =
-    ownerId(context) === null ? (options.claimCode ?? nonce()) : "";
+    ownerId(context) === null && !config.admin
+      ? (options.claimCode ?? nonce())
+      : "";
   const server = Fastify({
     logger: false,
     bodyLimit: 64 * 1024,
@@ -125,7 +127,7 @@ export async function createApp(config: Config, options: Options = {}) {
         403,
         "This request did not come from your dashboard.",
       );
-    if (pathname === "/api/session" || pathname === "/api/claim") return;
+    if (["/api/session", "/api/claim", "/api/login"].includes(pathname)) return;
     const session = sessionFor(request, context);
     if (!session) throw new HttpError(401, "Sign in to continue.");
     if (pathname !== "/api/setup/manifest") requireIdentity(request, context);

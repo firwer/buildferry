@@ -263,6 +263,7 @@ export class ExecutionService {
       state: "queued",
       priority: input.priority,
       route: input.route,
+      ubicloudRunner: input.ubicloudRunner ?? project.recipe.ubicloudRunner,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       deadline: Date.now() + (60 + project.recipe.maxMinutes) * 60_000,

@@ -389,7 +389,7 @@ describe("durable execution admission", () => {
           payload: { accountId: 2, allowedProjects: [] },
         })
       ).statusCode,
-    ).toBe(403);
+    ).toBe(404);
   });
   it("validates GitHub response schemas and leaves a source check unresolved after provider errors", async () => {
     const { service, fetcher } = await make();

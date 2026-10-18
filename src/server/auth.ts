@@ -6,9 +6,10 @@ import {
   type Account,
   type SessionView,
 } from "../shared/contracts.js";
-import { nonce, digest, equalSecret } from "./crypto.js";
+import { nonce, digest, equalSecret, passwordKey } from "./crypto.js";
 import {
   configuredApp,
+  identityFor,
   HttpError,
   ownerId,
   requireIdentity,
@@ -48,24 +49,23 @@ export function newAccount(
     period: currentPeriod(),
     verifiedAt: null,
     repositoryVerified: false,
-    message: "Confirm your allowance and private CI repository.",
+    message: "Set monthly minutes and finish worker setup.",
   };
 }
 
 function sessionView(request: FastifyRequest, context: Context): SessionView {
   const session = sessionFor(request, context);
   const app = configuredApp(context);
-  const user = session?.githubId
-    ? context.store.get("account", String(session.githubId), accountSchema)
-    : null;
+  const user = identityFor(session, context);
   let stage: SessionView["stage"] = "login";
-  if (user) stage = "dashboard";
+  if (user) stage = user.role === "owner" ? "dashboard" : "connected";
   else if (session?.setup && ownerId(context) === null) stage = "setup";
-  else if (ownerId(context) === null) stage = "claim";
+  else if (ownerId(context) === null && !context.config.admin) stage = "claim";
   return {
     stage,
     csrf: session?.csrf ?? "",
     demo: context.config.demo,
+    passwordLogin: Boolean(context.config.admin),
     user: user ? { id: user.id, login: user.login, role: user.role } : null,
     app:
       app && session
@@ -95,6 +95,7 @@ function createManifest(context: Context, name: string) {
       workflows: "write",
       metadata: "read",
       plan: "read",
+      repository_creation: "write",
     },
     // GitHub delivers installation events automatically; listing them rejects setup.
     default_events: ["push"],
@@ -149,6 +150,11 @@ async function finishLogin(
   });
   const user = await context.github.user(token.access_token);
   const { existing, initial } = authorizeUser(request, context, state, user.id);
+  const initiatingSession = sessionFor(request, context);
+  const admin =
+    state.sessionHash === digest(request.cookies.bf_session ?? "")
+      ? initiatingSession?.admin
+      : undefined;
   const role = initial ? "owner" : "member";
   context.store.transaction(() => {
     if (
@@ -171,7 +177,12 @@ async function finishLogin(
   const sessionToken = nonce();
   context.store.saveSession(
     sessionToken,
-    { csrf: nonce(), githubId: user.id, setup: false },
+    {
+      csrf: nonce(),
+      githubId: admin ? ownerId(context) : user.id,
+      setup: false,
+      admin,
+    },
     Date.now() + sessionSeconds * 1000,
   );
   setSessionCookie(reply, context, sessionToken, sessionSeconds);
@@ -187,8 +198,54 @@ export function registerAuth(
   claimCode: string,
 ): void {
   server.get("/api/session", async (request) => sessionView(request, context));
+  server.post(
+    "/api/login",
+    { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      const admin = context.config.admin;
+      if (!admin || context.config.demo)
+        throw new HttpError(404, "Password sign-in is not configured.");
+      const input = z
+        .object({
+          username: z.string().min(1).max(100),
+          password: z.string().min(1).max(1024),
+        })
+        .strict()
+        .parse(request.body);
+      const supplied = await passwordKey(input.password, admin.salt);
+      if (
+        !equalSecret(input.username, admin.username) ||
+        !equalSecret(
+          supplied.toString("hex"),
+          admin.passwordHash.toString("hex"),
+        )
+      )
+        throw new HttpError(401, "The username or password is incorrect.");
+      const token = nonce();
+      context.store.transaction(() => {
+        context.store.deleteSession(request.cookies.bf_session ?? "");
+        context.store.saveSession(
+          token,
+          {
+            csrf: nonce(),
+            githubId: ownerId(context),
+            setup: ownerId(context) === null,
+            admin: admin.passwordHash.toString("hex"),
+          },
+          Date.now() + sessionSeconds * 1000,
+        );
+      });
+      setSessionCookie(reply, context, token, sessionSeconds);
+      context.store.audit(`${admin.username} signed in as administrator.`);
+      return { ok: true };
+    },
+  );
   server.post("/api/claim", async (request, reply) => {
-    if (context.config.demo || ownerId(context) !== null)
+    if (
+      context.config.demo ||
+      context.config.admin ||
+      ownerId(context) !== null
+    )
       throw new HttpError(409, "This installation is already claimed.");
     const { code } = z
       .object({ code: z.string().min(1).max(256) })

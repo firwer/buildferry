@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes, scryptSync } from "node:crypto";
 import path from "node:path";
 import { z } from "zod";
 
@@ -11,6 +11,7 @@ export type Config = Readonly<{
   key: Buffer;
   demo: boolean;
   trustProxyHops: number;
+  admin?: Readonly<{ username: string; salt: Buffer; passwordHash: Buffer }>;
 }>;
 
 /** Persist one key and refuse to replace a missing key for an existing database. */
@@ -74,11 +75,30 @@ export function loadConfig(
   }
   if (key.length !== 32)
     throw new Error("The encryption key must contain exactly 32 bytes.");
+  let admin: Config["admin"];
+  if (env.BUILDFERRY_ADMIN_USERNAME || env.BUILDFERRY_ADMIN_PASSWORD) {
+    const username = z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .parse(env.BUILDFERRY_ADMIN_USERNAME);
+    const password = z
+      .string()
+      .min(12)
+      .max(1024)
+      .parse(env.BUILDFERRY_ADMIN_PASSWORD);
+    const salt = createHmac("sha256", key)
+      .update(`buildferry-admin:${username}`)
+      .digest();
+    admin = { username, salt, passwordHash: scryptSync(password, salt, 64) };
+  }
   return {
     publicUrl: publicUrl.origin,
     dataDir,
     key,
     demo,
+    admin,
     trustProxyHops: z.coerce
       .number()
       .int()

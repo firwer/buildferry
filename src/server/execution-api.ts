@@ -1,13 +1,16 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { jobSchema, projectSchema } from "../shared/execution.js";
+import { accountSchema } from "../shared/contracts.js";
 import {
+  requireAccountManager,
   requireIdentity,
   requireOwner,
   HttpError,
   type Context,
 } from "./context.js";
 import { ExecutionService } from "./execution-service.js";
+import { createWorkerRepository } from "./worker-repository.js";
 import { ExecutionController } from "./execution-controller.js";
 import {
   WorkerIdentity,
@@ -83,7 +86,6 @@ export function registerExecution(
     return changed;
   });
   server.post("/api/workers", async (request) => {
-    const owner = requireIdentity(request, context);
     const input = z
       .object({
         accountId: z.number().int().positive(),
@@ -91,12 +93,23 @@ export function registerExecution(
       })
       .strict()
       .parse(request.body);
-    if (input.accountId !== owner.id)
-      throw new HttpError(
-        403,
-        "Only an account's owner can install its worker and approve projects.",
-      );
+    const account = context.store.get(
+      "account",
+      String(input.accountId),
+      accountSchema,
+    );
+    if (!account) throw new HttpError(404, "This account is not connected.");
+    requireAccountManager(request, context, account);
     return service.provisionWorker(input.accountId, input.allowedProjects);
+  });
+  server.post("/api/accounts/:id/repository", async (request) => {
+    const { id } = z
+      .object({ id: z.coerce.number().int().positive() })
+      .parse(request.params);
+    const account = context.store.get("account", String(id), accountSchema);
+    if (!account) throw new HttpError(404, "This account is not connected.");
+    requireAccountManager(request, context, account);
+    return createWorkerRepository(context, id);
   });
   server.post("/api/jobs", async (request, reply) => {
     requireOwner(request, context);

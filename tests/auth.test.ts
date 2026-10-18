@@ -74,6 +74,7 @@ describe("GitHub App setup and OAuth", () => {
       workflows: "write",
       metadata: "read",
       plan: "read",
+      repository_creation: "write",
     });
     const state = new URL(form.url).searchParams.get("state") ?? "";
     const conversion = await app.server.inject({

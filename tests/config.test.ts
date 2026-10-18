@@ -18,6 +18,29 @@ afterEach(() => {
 });
 
 describe("self-hosted configuration", () => {
+  it("requires both administrator variables and derives a stable private login key", () => {
+    const env = {
+      BUILDFERRY_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+      BUILDFERRY_ADMIN_USERNAME: "admin",
+      BUILDFERRY_ADMIN_PASSWORD: "fixture-admin-password",
+    };
+    const first = loadConfig(env, false);
+    expect(first.admin?.passwordHash).toEqual(
+      loadConfig(env, false).admin?.passwordHash,
+    );
+    expect(JSON.stringify(first.admin)).not.toContain(
+      env.BUILDFERRY_ADMIN_PASSWORD,
+    );
+    expect(() =>
+      loadConfig({ ...env, BUILDFERRY_ADMIN_PASSWORD: undefined }, false),
+    ).toThrow();
+    expect(() =>
+      loadConfig({ ...env, BUILDFERRY_ADMIN_USERNAME: undefined }, false),
+    ).toThrow();
+    expect(() =>
+      loadConfig({ ...env, BUILDFERRY_ADMIN_PASSWORD: "short" }, false),
+    ).toThrow();
+  });
   it("persists a private key across restarts and accepts an external key", () => {
     const dataDir = directory();
     const first = loadConfig({ BUILDFERRY_DATA_DIR: dataDir }, false);

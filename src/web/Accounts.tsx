@@ -21,7 +21,10 @@ function AccountEditor({
   const [settings, setSettings] = useState(account.settings);
   const save = useMutation({
     mutationFn: () =>
-      api(`/api/accounts/${account.id}`, accountSchema, "PUT", settings),
+      api(`/api/accounts/${account.id}`, accountSchema, "PUT", {
+        ...settings,
+        allowanceConfirmed: true,
+      }),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ["dashboard"] });
       onClose();
@@ -49,7 +52,7 @@ function AccountEditor({
     <Dialog title={`Settings for ${account.login}`} onClose={onClose}>
       <form onSubmit={submit} className="form-grid">
         <label>
-          <span>Included minutes</span>
+          <span>Monthly minutes</span>
           <input
             type="number"
             min={0}
@@ -60,7 +63,7 @@ function AccountEditor({
           />
         </label>
         <label>
-          <span>Contribution limit</span>
+          <span>Minutes available to BuildFerry</span>
           <input
             type="number"
             min={0}
@@ -73,7 +76,7 @@ function AccountEditor({
           />
         </label>
         <label>
-          <span>Personal reserve</span>
+          <span>Keep for other work</span>
           <input
             type="number"
             min={0}
@@ -95,17 +98,6 @@ function AccountEditor({
           />
         </label>
         <label>
-          <span>Share weight</span>
-          <input
-            type="number"
-            min={1}
-            max={10}
-            required
-            value={settings.weight}
-            onChange={(event) => numeric("weight", event.target.value)}
-          />
-        </label>
-        <label>
           <span>Parallel jobs</span>
           <input
             type="number"
@@ -116,23 +108,40 @@ function AccountEditor({
             onChange={(event) => numeric("concurrency", event.target.value)}
           />
         </label>
-        <label className="full">
-          <span>Private CI repository name</span>
-          <input
-            value={settings.workerRepository}
-            placeholder="buildferry-ci"
-            maxLength={100}
-            onChange={(event) =>
-              setSettings((previous) => ({
-                ...previous,
-                workerRepository: event.target.value,
-              }))
-            }
-          />
-          <small>
-            Owned by {account.login}. Install your GitHub App on it first.
-          </small>
-        </label>
+        <details className="full">
+          <summary>Advanced settings</summary>
+          <div className="form-grid">
+            <label>
+              <span>Share weight</span>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                required
+                value={settings.weight}
+                onChange={(event) => numeric("weight", event.target.value)}
+              />
+            </label>
+            <label className="full">
+              <span>Private CI repository name</span>
+              <input
+                value={settings.workerRepository}
+                placeholder="buildferry-ci"
+                maxLength={100}
+                onChange={(event) =>
+                  setSettings((previous) => ({
+                    ...previous,
+                    workerRepository: event.target.value,
+                  }))
+                }
+              />
+              <small>
+                Leave empty for automatic setup. Select a name here only to use
+                an existing worker.
+              </small>
+            </label>
+          </div>
+        </details>
         <label className="full">
           <span>Contribution status</span>
           <select
@@ -151,19 +160,10 @@ function AccountEditor({
             <option value="draining">Finishing current work</option>
           </select>
         </label>
-        <label className="check-label full">
-          <input
-            type="checkbox"
-            checked={settings.allowanceConfirmed}
-            onChange={(event) =>
-              setSettings((previous) => ({
-                ...previous,
-                allowanceConfirmed: event.target.checked,
-              }))
-            }
-          />
-          <span>I confirm this allowance resets each calendar month.</span>
-        </label>
+        <p className="fine-print full">
+          Use the monthly allowance included in this account's GitHub plan.
+          Saving these settings confirms that amount.
+        </p>
         <div className="full">
           <Failure error={save.error} />
           <button className="button primary" disabled={save.isPending}>
@@ -195,9 +195,9 @@ function AccountCard({
     mutationFn: () => api(`/api/accounts/${account.id}`, z.null(), "DELETE"),
     onSuccess: () => client.invalidateQueries({ queryKey: ["dashboard"] }),
   });
-  const canManage = session.user?.id === account.id && !session.demo;
-  const canRefresh =
-    !session.demo && (canManage || session.user?.role === "owner");
+  const canManage =
+    !session.demo &&
+    (session.user?.id === account.id || session.user?.role === "owner");
   return (
     <article className="account-card">
       <div className="account-heading">
@@ -245,7 +245,7 @@ function AccountCard({
           {available > 0 ? "Available" : "Needs attention"}
         </span>
         <div>
-          {canRefresh && (
+          {canManage && (
             <button
               className="icon-button"
               type="button"

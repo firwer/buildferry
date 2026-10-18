@@ -5,14 +5,33 @@ BuildFerry's target integration is a native runner broker. GitHub continues to e
 ```yaml
 jobs:
   test:
-    runs-on: buildferry
+    runs-on:
+      [
+        buildferry,
+        "buildferry-${{ github.run_id }}-${{ github.run_attempt }}-test",
+      ]
     # Keep the original steps, permissions, timeouts and test groups.
   build:
-    runs-on: buildferry-build
-    # This logical profile declares resources, not a specific provider.
+    runs-on:
+      [
+        buildferry,
+        "buildferry-${{ github.run_id }}-${{ github.run_attempt }}-build",
+      ]
+    # Job identity labels contain no account, provider or machine choice.
 ```
 
 These are the intended production labels. The current live application still runs approved command recipes. Only isolated, manually provisioned native probes have run; installing BuildFerry does not yet make these labels available.
+
+## Workflow and job settings
+
+The dashboard loads a repository's real workflows and job names. Reading YAML supplies inventory and dependencies only; GitHub still interprets and executes all steps, conditions, matrices, reusable workflows and release environments. Unsupported inventory must be shown as unavailable, never guessed into a runnable substitute.
+
+- A workflow sets its ordered providers, for example all free GitHub accounts, then Ubicloud, then explicitly budgeted paid GitHub on a designated account.
+- A job override **replaces** the workflow provider list, including its own fallback list. A pinned-only job cannot escape to another provider. Capacity shortages keep it waiting, then fail visibly at the deadline.
+- A job's explicit machine overrides the workflow machine, then the provider default. Only the requested size and its configured rate are eligible. No automatic upgrade or price copying between sizes.
+- Budgets, account reserves and parallel limits still apply to every route. Paid GitHub overflow is a requested next adapter, not an available route today. AWS remains outside the current path.
+
+A generic shared `buildferry` label is safe only when every matching queued job shares the same routing policy. GitHub may otherwise give a free-default job a host reserved for a paid-only job, or the reverse. Strict job overrides therefore require provider-independent labels that distinguish run, attempt and job, as above. Matrix axes must also distinguish demands when their policies or resources differ. The one-time integration adds these identity labels; subsequent provider or machine changes stay in the dashboard. Do not build the label from `github.job`: GitHub documents that property as available only inside execution steps. [GitHub contexts](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts).
 
 ## Responsibility boundary
 
@@ -32,7 +51,7 @@ Changing an account or fallback priority needs no source YAML change after initi
 3. Dispatch an approved outer launcher into the selected owner's private CI repository. For GitHub, that outer workflow consumes its owner's hosted minutes. For Ubicloud, its selected runner consumes the configured provider budget. Private source never runs in a public worker repository.
 4. The launcher authenticates to BuildFerry using its independently verified GitHub identity. Deliver a single-use JIT runner configuration bound to the approved source repository, profile and launcher lease. It contains no long-lived account credential. Start the official runner in a fresh VM with a bounded lifetime.
 5. GitHub assigns the original job directly to the runner. Checkout, actions, secrets, caches, logs, artifacts and job results use the source job's normal GitHub context. BuildFerry does not translate workflow steps or synthesize a passing native result.
-6. Observe actual assignment by registered runner ID. A generic label represents a capacity pool: GitHub may assign a different eligible queued job from the one that triggered provisioning. Record the actual assignment and re-evaluate remaining demand; never assume a label binds a runner to a particular job. Separate trust classes and resource profiles.
+6. Verify actual assignment by registered runner ID and the demand's identity labels. Never place incompatible job policies into one generic label pool. Record assignment and re-evaluate remaining demand; an unexpected assignment is an admission error, not a successful routing decision. Separate trust classes and resource profiles.
 7. After one job, deregister the runner and terminate the outer host. Reconcile the outer provider duration, reservations and actual job assignment before releasing capacity. Persist uncertain dispatches and cancellations across restarts. Never launch a duplicate host merely because a response was lost.
 
 GitHub documents [ephemeral runners, autoscaling events and registration permissions](https://docs.github.com/en/actions/reference/runners/self-hosted-runners). The [JIT API](https://docs.github.com/en/rest/actions/self-hosted-runners#create-configuration-for-a-just-in-time-runner-for-a-repository) returns a one-use runner configuration. These APIs are the runner lifecycle foundation; general cross-owner allowance eligibility is a separate provider-policy question retained in the MVP plan.

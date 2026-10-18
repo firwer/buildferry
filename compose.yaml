@@ -9,6 +9,8 @@ services:
     environment:
       BUILDFERRY_PUBLIC_URL: ${BUILDFERRY_PUBLIC_URL:-http://localhost:8787}
       BUILDFERRY_TRUST_PROXY_HOPS: ${BUILDFERRY_TRUST_PROXY_HOPS:-0}
+      BUILDFERRY_ADMIN_USERNAME: ${BUILDFERRY_ADMIN_USERNAME:-}
+      BUILDFERRY_ADMIN_PASSWORD: ${BUILDFERRY_ADMIN_PASSWORD:-}
     volumes:
       - buildferry-data:/data
     read_only: true

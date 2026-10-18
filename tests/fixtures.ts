@@ -42,11 +42,13 @@ export async function fixture(
     fetcher?: typeof fetch;
     proxyHops?: number;
     verifyWorkerIdentity?: VerifyWorkerIdentity;
+    config?: Partial<Config>;
   } = {},
 ) {
   const config = testConfig({
     demo: options.demo ?? false,
     trustProxyHops: options.proxyHops ?? 0,
+    ...options.config,
   });
   const store = new Store(":memory:", config.key);
   const fetcher =

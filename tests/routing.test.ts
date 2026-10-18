@@ -246,7 +246,7 @@ describe("verified account capacity", () => {
   it("requires owner confirmation, a verified repository, and current fresh usage", () => {
     const account = readyAccount();
     account.settings.allowanceConfirmed = false;
-    expect(candidatesFor([account], [])[0]?.reason).toContain("confirmed");
+    expect(candidatesFor([account], [])[0]?.reason).toContain("Confirm");
     account.settings.allowanceConfirmed = true;
     account.repositoryVerified = false;
     expect(candidatesFor([account], [])[0]?.reason).toContain("repository");

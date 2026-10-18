@@ -4,7 +4,7 @@ BuildFerry will let a team connect its GitHub accounts, contribute a chosen amou
 
 The preferred source interface is now a native `runs-on: buildferry` runner broker, preserving the original GitHub job and result. See the [native runner design and live probe evidence](native-runner-design.md). The source-dispatch bridge described below is the earlier recipe-mode approach; native-runner implementation gates supersede it for normal workflow adoption. Automatic native routing is not yet implemented.
 
-The first release targets one team operating one instance, with several projects and any configured number of consenting personal GitHub account owners. Concurrency and provider limits still bound usable capacity. GitHub is the initial source host; project commands remain independent of language or framework.
+The first release targets one company, one trusted administrator and one instance, with several projects and any configured number of consenting personal GitHub accounts. It has no multi-tenancy or dashboard permission matrix. Concurrency and provider limits still bound usable capacity. GitHub is the initial source host; project commands remain independent of language or framework.
 
 ## Product boundaries
 
@@ -32,11 +32,11 @@ Provide a Docker Compose example and a Coolify deployment guide. Initial configu
 
 The setup journey is:
 
-1. Start the service and enter a one-use setup credential printed to the local server console. This grants a short-lived setup session before a GitHub App exists.
+1. Set the administrator username/password environment variables and start the service. Sign in to complete setup. Existing installations without these variables retain the original one-use setup code and GitHub-owner login.
 2. Select **Create GitHub App**. A manifest preconfigures permissions, callback URLs, and webhook events. Complete GitHub sign-in through the new app, bind the verified identity as the instance owner, and close installation claiming. Each self-hosted instance owns its own app and credentials. The app must support installation on the teammates' accounts; dashboard access remains restricted to invited users. [App manifests](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest), [app visibility](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/making-a-github-app-public-or-private).
 3. Install the app on a selected source repository. BuildFerry inventories existing checks and proposes an integration PR. It does not merge that PR or change branch protection.
-4. Invite an account owner through a short-lived, single-use invitation link. They sign in as themselves, authorize usage access, and create or select a private CI repository they own. Bootstrap its pinned worker workflow. Display the exact repository and account access before authorization.
-5. The account owner confirms the allowance and billing period, the maximum contribution, a personal reserve, and permitted projects. A connection becomes eligible only after billing, ownership, workflow, and source-access probes succeed.
+4. Invite an account owner through a short-lived, single-use invitation link. They authorize GitHub access once and see a simple connected confirmation. The administrator creates their private worker through the dashboard using the dedicated Repository creation permission and installs its pinned launcher. Display GitHub's exact requested access during authorization.
+5. The administrator sets each connected account's monthly allowance, maximum contribution, reserve, permitted projects and parallel slots. A connection becomes eligible only after billing, ownership, workflow, and source-access probes succeed.
 6. Select **Connect Ubicloud**. Guide the owner through Ubicloud's GitHub runner app installation, then securely enter a project API token in BuildFerry. Verify that the selected repository has runner access. Ubicloud currently documents token-based API authentication; do not invent a provider OAuth flow. [Ubicloud setup](https://www.ubicloud.com/docs/github-actions-integration/quickstart), [API authentication](https://www.ubicloud.com/docs/api-reference/overview).
 7. Choose fallback priorities and budgets, preview a routing decision, and run a small validation job before enabling real work.
 
@@ -46,21 +46,23 @@ Automatic private-repository creation must be proven with the supported GitHub A
 
 ## Dashboard controls
 
-| View               | Required controls and information                                                                                                                |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Overview           | Queue, active work, connection health, contributed capacity, observed spend, estimated spend, and last billing refresh                           |
-| Accounts           | Link, pause, drain, reconnect, or remove an owner; allowance, contribution cap, reserve, billing period, allowed projects, and concurrency limit |
-| Providers          | Connect Ubicloud; verify installations; select supported runner sizes; configure rates and budget limits; show connection health                 |
-| Routing            | Ordered tiers, fixed order or shared allocation within a tier, account weights, queue wait limit, and permitted fallback providers               |
-| Jobs               | Project, revision, attempt, urgency, selected account and runner, routing explanation, queue time, duration, logs, cancel, and retry             |
-| Performance        | Time spent in setup, tests, builds, and cache transfer; slowest required path; aggregate compute minutes; observed and estimated cost            |
-| Access and history | Instance administrators, account owners, project viewers, and an audit history of credential, routing, and budget changes                        |
+| View        | Required controls and information                                                                                                                |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Overview    | Queue, active work, connection health, contributed capacity, observed spend, estimated spend, and last billing refresh                           |
+| Accounts    | Link, pause, drain, reconnect, or remove an owner; allowance, contribution cap, reserve, billing period, allowed projects, and concurrency limit |
+| Providers   | Connect Ubicloud; verify installations; select supported runner sizes; configure rates and budget limits; show connection health                 |
+| Routing     | Ordered tiers, fixed order or shared allocation within a tier, account weights, queue wait limit, and permitted fallback providers               |
+| Jobs        | Project, revision, attempt, urgency, selected account and runner, routing explanation, queue time, duration, logs, cancel, and retry             |
+| Performance | Time spent in setup, tests, builds, and cache transfer; slowest required path; aggregate compute minutes; observed and estimated cost            |
+| History     | Administrator changes to connections, routing and budgets; no multi-user roles or delegation settings                                            |
 
-Instance administrators manage projects and routing. Account owners set their contribution ceiling, permitted projects, and personal reserve; an administrator cannot increase those limits without that owner's approval. Viewers can inspect authorized projects without seeing secrets or private usage details from unrelated repositories.
+One trusted company administrator manages all connected account limits, project selections, routing, defaults and job overrides. Contributors authorize access once and can revoke it through GitHub. Do not add delegation toggles, per-user approval screens or tenant controls.
 
 Pause stops new assignments. Drain stops new assignments while allowing existing work to finish. Remove drains by default and retains the configuration snapshot needed to verify active results. Revoked access stops assignments immediately; failed cancellation or verification remains visible.
 
 ## Priority and fallback behavior
+
+Workflow defaults define an ordered provider list and a default machine. A selected job's override replaces that list and takes precedence, including its own fallbacks and machine choice. Example: a workflow uses Free GitHub, then Ubicloud, then budgeted paid GitHub; its build job can instead require Ubicloud only on a chosen machine. Unlisted providers and silent machine upgrades are forbidden. Read existing workflow job metadata for these controls; leave command execution and checks with GitHub. See the native design for the demand labels needed to enforce distinct job policies.
 
 Provider priority and job urgency are separate controls. Urgency changes queue order. It never changes the allowed providers, skips a check, or increases a budget. Prevent starvation by gradually raising the effective queue priority of waiting jobs.
 

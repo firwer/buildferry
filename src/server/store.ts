@@ -6,6 +6,7 @@ export const storedSessionSchema = z.object({
   csrf: z.string(),
   githubId: z.number().nullable(),
   setup: z.boolean(),
+  admin: z.string().optional(),
 });
 export type StoredSession = z.infer<typeof storedSessionSchema>;
 export const stateSchema = z.object({

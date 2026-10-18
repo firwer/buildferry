@@ -16,6 +16,24 @@ export function Setup({ session }: Readonly<{ session: SessionView }>) {
   const client = useQueryClient();
   const [code, setCode] = useState("");
   const [appName, setAppName] = useState("BuildFerry Team");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const login = useMutation({
+    mutationFn: () =>
+      api("/api/login", z.object({ ok: z.boolean() }), "POST", {
+        username,
+        password,
+      }),
+    onSuccess: async () => {
+      setPassword("");
+      await client.invalidateQueries({ queryKey: ["session"] });
+    },
+  });
+  const logout = useMutation({
+    mutationFn: () =>
+      api("/api/logout", z.object({ ok: z.boolean() }), "POST", {}),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["session"] }),
+  });
   const claim = useMutation({
     mutationFn: () =>
       api("/api/claim", z.object({ ok: z.boolean() }), "POST", { code }),
@@ -145,7 +163,63 @@ export function Setup({ session }: Readonly<{ session: SessionView }>) {
               </p>
             </>
           )}
-          {(session.stage === "login" ||
+          {session.stage === "connected" && (
+            <>
+              <span className="step">Account connected</span>
+              <h2>You are all set</h2>
+              <p>
+                Your GitHub account is connected. Your administrator can manage
+                its CI minutes and worker setup. You can close this window.
+              </p>
+              <button
+                className="button secondary"
+                onClick={() => logout.mutate()}
+                disabled={logout.isPending}
+              >
+                Return to sign in
+              </button>
+              <Failure error={logout.error} />
+            </>
+          )}
+          {session.stage === "login" && session.passwordLogin && !invite && (
+            <>
+              <span className="step">Your company workspace</span>
+              <h2>Sign in to BuildFerry</h2>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  login.mutate();
+                }}
+              >
+                <label htmlFor="admin-username">
+                  <span>Username</span>
+                </label>
+                <input
+                  id="admin-username"
+                  autoComplete="username"
+                  required
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                />
+                <label htmlFor="admin-password">
+                  <span>Password</span>
+                </label>
+                <input
+                  id="admin-password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+                <Failure error={login.error} />
+                <button className="button primary" disabled={login.isPending}>
+                  {login.isPending ? <Busy>Signing in</Busy> : "Sign in"}
+                </button>
+              </form>
+            </>
+          )}
+          {((session.stage === "login" && (!session.passwordLogin || invite)) ||
             (session.stage === "setup" && session.app)) && (
             <>
               <span className="step">Your team workspace</span>
@@ -153,7 +227,7 @@ export function Setup({ session }: Readonly<{ session: SessionView }>) {
               <p>
                 {session.stage === "setup"
                   ? "Sign in with the account that registered your GitHub App to finish setup."
-                  : "Sign in with your connected GitHub account to manage your team's capacity."}
+                  : "Connect your GitHub account so your company can use its CI capacity. Your administrator manages limits and worker setup."}
               </p>
               <a className="button primary" href={loginUrl}>
                 <GitFork size={18} />

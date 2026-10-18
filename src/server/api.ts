@@ -6,6 +6,7 @@ import {
   previewInputSchema,
   providerInputSchema,
   providerSchema,
+  providerSettingsSchema,
   shardInputSchema,
   type Account,
 } from "../shared/contracts.js";
@@ -65,7 +66,7 @@ export async function refreshAccount(
     }
     updated.message = updated.repositoryVerified
       ? "Usage and private repository verified."
-      : "Usage verified. Select your private CI repository.";
+      : "Usage verified. Set up this account's worker.";
   } catch (error) {
     updated.verifiedAt = null;
     updated.usedMinutes = null;
@@ -129,10 +130,10 @@ export function registerApi(server: FastifyInstance, context: Context): void {
   server.put("/api/accounts/:id", async (request) => {
     const identity = requireIdentity(request, context);
     const account = accountFrom(request, context);
-    if (account.id !== identity.id)
+    if (account.id !== identity.id && identity.role !== "owner")
       throw new HttpError(
         403,
-        "Only this account's owner can change its contribution.",
+        "Only this account's owner or the administrator can change its settings.",
       );
     const settings = accountSettingsSchema.parse(request.body);
     const changed = {
@@ -144,7 +145,7 @@ export function registerApi(server: FastifyInstance, context: Context): void {
     };
     context.store.put("account", String(account.id), changed);
     context.store.audit(
-      `${identity.login} updated their account limits and priority.`,
+      `${identity.login} updated ${account.login}'s account limits and priority${!settings.allowanceConfirmed ? "; monthly minutes need confirmation" : ""}.`,
     );
     return refreshAccount(changed, context, credentials);
   });
@@ -221,6 +222,26 @@ export function registerApi(server: FastifyInstance, context: Context): void {
     context.store.put("provider", id, updated);
     return updated;
   });
+  server.put("/api/providers/:id", async (request) => {
+    requireOwner(request, context);
+    const { id } = z
+      .object({ id: providerInputSchema.shape.projectId })
+      .parse(request.params);
+    const settings = providerSettingsSchema.parse(request.body);
+    const current = context.store.get("provider", id, providerSchema);
+    if (!current) throw new HttpError(404, "This provider is not connected.");
+    // Existing runs retain their runner and reserved rate; the monthly ledger is never reset.
+    const updated = {
+      ...current,
+      ...settings,
+      machineRates: settings.machineRates ?? [],
+    };
+    context.store.put("provider", id, updated);
+    context.store.audit(
+      `${current.name}'s default machine and spending settings were updated for future assignments.`,
+    );
+    return updated;
+  });
   server.delete("/api/providers/:id", async (request, reply) => {
     requireOwner(request, context);
     const { id } = z
@@ -237,8 +258,12 @@ export function registerApi(server: FastifyInstance, context: Context): void {
     const input = previewInputSchema.parse(request.body);
     return previewRouting(capacitySnapshot(context).candidates, input);
   });
-  server.post("/api/tests/plan", async (request) => {
-    requireIdentity(request, context);
-    return planShards(shardInputSchema.parse(request.body));
-  });
+  server.post(
+    "/api/tests/plan",
+    { bodyLimit: 8 * 1024 * 1024 },
+    async (request) => {
+      requireIdentity(request, context);
+      return planShards(shardInputSchema.parse(request.body));
+    },
+  );
 }

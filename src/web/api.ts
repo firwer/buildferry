@@ -45,11 +45,11 @@ export async function loadSession() {
   return session;
 }
 
-export const money = (micros: number) =>
+export const money = (micros: number, maximumFractionDigits = 3) =>
   new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 3,
+    maximumFractionDigits,
   }).format(micros / 1_000_000);
 export const number = (value: number) =>
   new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value);

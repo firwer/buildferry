@@ -7,7 +7,12 @@ import {
   workerSchema,
   type Project,
 } from "../shared/execution.js";
-import type { Dashboard, SessionView } from "../shared/contracts.js";
+import {
+  accountSchema,
+  ubicloudMachines,
+  type Dashboard,
+  type SessionView,
+} from "../shared/contracts.js";
 import { api, money, number } from "./api.js";
 import { Busy, Dialog, Empty, External, Failure } from "./components.js";
 
@@ -17,6 +22,39 @@ const executionQuery = {
   refetchInterval: 5000,
   retry: false,
 } as const;
+
+function MachineChoice({
+  value,
+  onChange,
+  inherit,
+}: Readonly<{
+  value: string;
+  onChange: (value: string) => void;
+  inherit: string;
+}>) {
+  return (
+    <div className="full">
+      <label>
+        <span>Ubicloud machine</span>
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          <option value="">{inherit}</option>
+          {ubicloudMachines.map((machine) => (
+            <option key={machine.runner} value={machine.runner}>
+              {machine.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <small>
+        Used only on Ubicloud. The chosen size needs a rate in Connections. No
+        automatic upgrade.
+      </small>
+    </div>
+  );
+}
 
 function WorkloadForm({
   project,
@@ -36,6 +74,7 @@ function WorkloadForm({
   );
   const [onPush, setOnPush] = useState(project?.onPush ?? false);
   const [enabled, setEnabled] = useState(project?.enabled ?? true);
+  const [machine, setMachine] = useState(project?.recipe.ubicloudRunner ?? "");
   const save = useMutation({
     mutationFn: () => {
       const recipe = {
@@ -45,6 +84,7 @@ function WorkloadForm({
         maxMinutes: minutes,
         memoryGiB: memory,
         maxCostMicros: Math.round(spend * 1_000_000),
+        ...(machine ? { ubicloudRunner: machine } : {}),
       };
       return project
         ? api(`/api/projects/${project.id}`, projectSchema, "PUT", {
@@ -161,6 +201,11 @@ function WorkloadForm({
           />
           <span>Run on default branch updates</span>
         </label>
+        <MachineChoice
+          value={machine}
+          onChange={setMachine}
+          inherit="Use provider default"
+        />
         {project && (
           <label className="checkbox-field">
             <input
@@ -189,43 +234,73 @@ export function WorkerSetup({
   const client = useQueryClient();
   const query = useQuery(executionQuery);
   const [selected, setSelected] = useState<string[] | null>(null);
-  const own = data.accounts.find((account) => account.id === session.user?.id);
+  const [accountId, setAccountId] = useState<number | null>(null);
+  const own = data.accounts.find(
+    (account) => account.id === (accountId ?? session.user?.id),
+  );
   const worker = query.data?.workers.find(
     (value) => value.accountId === own?.id,
   );
   const approved = selected ?? worker?.allowedProjects ?? [];
   const install = useMutation({
-    mutationFn: () =>
-      api("/api/workers", workerSchema, "POST", {
+    mutationFn: async () => {
+      if (!own) throw new Error("Choose a connected GitHub account.");
+      if (!own.settings.workerRepository)
+        await api(
+          `/api/accounts/${own.id}/repository`,
+          accountSchema,
+          "POST",
+          {},
+        );
+      return api("/api/workers", workerSchema, "POST", {
         accountId: own?.id,
         allowedProjects: approved,
-      }),
+      });
+    },
     onSuccess: async () => {
       setSelected(null);
       await client.invalidateQueries({ queryKey: ["execution"] });
+      await client.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
-  const installLabel = worker
-    ? "Save project approvals"
-    : "Install worker and approve projects";
+  const installLabel = worker ? "Save project approvals" : "Set up worker";
   return (
     <section className="panel">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Your account, your choice</p>
-          <h2>Your worker</h2>
+          <p className="eyebrow">Ready to run</p>
+          <h2>Worker setup</h2>
         </div>
         <span className="status">{worker ? "Installed" : "Setup needed"}</span>
       </div>
       <p className="panel-intro">
-        Create a new private CI repository with a README, select it in your
-        account settings, then install the GitHub App on it. Existing
-        repositories with CI history cannot be overwritten.
+        Choose an account and the projects it can run. BuildFerry creates its
+        private worker repository and installs the worker.
       </p>
+      {session.user?.role === "owner" && (
+        <label>
+          <span>GitHub account</span>
+          <select
+            value={own?.id ?? ""}
+            onChange={(event) => {
+              setAccountId(Number(event.target.value));
+              setSelected(null);
+              install.reset();
+            }}
+            disabled={install.isPending}
+          >
+            {data.accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.login}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <p>
         {own?.settings.workerRepository
           ? `${own.login}/${own.settings.workerRepository}`
-          : "Choose your private CI repository in account settings first."}
+          : `${own?.login ?? "Account"}/buildferry-ci will be created.`}
       </p>
       {session.app && (
         <p>
@@ -234,8 +309,8 @@ export function WorkerSetup({
           </External>
         </p>
       )}
-      <fieldset className="consent-list">
-        <legend>Projects you approve for your worker</legend>
+      <fieldset className="consent-list" disabled={install.isPending}>
+        <legend>Projects this worker can run</legend>
         {query.data?.projects.map((project) => (
           <label className="checkbox-field" key={project.id}>
             <input
@@ -260,15 +335,10 @@ export function WorkerSetup({
       </fieldset>
       <button
         className="button primary"
-        disabled={
-          session.demo ||
-          !own?.settings.workerRepository ||
-          install.isPending ||
-          !query.data
-        }
+        disabled={session.demo || !own || install.isPending || !query.data}
         onClick={() => install.mutate()}
       >
-        {install.isPending ? <Busy>Installing your worker</Busy> : installLabel}
+        {install.isPending ? <Busy>Setting up worker</Busy> : installLabel}
       </button>
       <Failure error={query.error ?? install.error} />
     </section>
@@ -282,12 +352,14 @@ function RunForm({
   const client = useQueryClient();
   const [sha, setSha] = useState("");
   const [route, setRoute] = useState("auto");
+  const [machine, setMachine] = useState("");
   const run = useMutation({
     mutationFn: () =>
       api("/api/jobs", jobSchema, "POST", {
         projectId: project.id,
         ...(sha ? { sha } : {}),
         route,
+        ...(machine ? { ubicloudRunner: machine } : {}),
       }),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ["execution"] });
@@ -327,6 +399,15 @@ function RunForm({
             <option value="ubicloud">Ubicloud benchmark</option>
           </select>
         </label>
+        <MachineChoice
+          value={machine}
+          onChange={setMachine}
+          inherit={
+            project.recipe.ubicloudRunner
+              ? `Use workload choice: ${ubicloudMachines.find((value) => value.runner === project.recipe.ubicloudRunner)?.label}`
+              : "Use provider default"
+          }
+        />
         <p className="fine-print full">
           Benchmarks still respect your paid limits. Compare the same revision
           and commands across providers; results show actual queue and command
@@ -456,7 +537,20 @@ export function Workloads({ session }: Readonly<{ session: SessionView }>) {
               <p>{job.message}</p>
               <div className="run-metrics">
                 <span>{job.worker?.repository ?? "No worker assigned"}</span>
-                <span>{job.providerId ? "Ubicloud" : "GitHub"}</span>
+                <span>
+                  {job.runner
+                    ? job.providerId
+                      ? "Ubicloud"
+                      : "GitHub"
+                    : "Awaiting assignment"}
+                </span>
+                {job.runner && (
+                  <span>
+                    {ubicloudMachines.find(
+                      (machine) => machine.runner === job.runner,
+                    )?.label ?? job.runner}
+                  </span>
+                )}
                 {job.actualMinutes !== null && (
                   <span>Runner time {number(job.actualMinutes)} min</span>
                 )}

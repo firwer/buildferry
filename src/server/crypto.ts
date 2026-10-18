@@ -3,6 +3,7 @@ import {
   createDecipheriv,
   createHash,
   randomBytes,
+  scrypt,
   timingSafeEqual,
 } from "node:crypto";
 
@@ -14,6 +15,16 @@ export function equalSecret(left: string, right: string): boolean {
     Buffer.from(digest(left), "hex"),
     Buffer.from(digest(right), "hex"),
   );
+}
+
+/** Derive login keys without blocking the controller's reconciliation loop. */
+export function passwordKey(password: string, salt: Buffer): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scrypt(password, salt, 64, (error, key) => {
+      if (error) reject(error);
+      else resolve(key);
+    });
+  });
 }
 
 /** Bind ciphertext to its record name so credentials cannot be swapped between owners. */

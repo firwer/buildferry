@@ -235,6 +235,44 @@ describe("dashboard authentication", () => {
 });
 
 describe("account contributions", () => {
+  it("lets the administrator set another connected account's allowance, reserve and parallel slots", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(response({ usageItems: [] }));
+    const { server, store, headers, cookies } = await make({
+      signedIn: true,
+      fetcher,
+    });
+    const member = newAccount(2, "member", "member");
+    store.put("account", "2", member);
+    store.setSecret("github-user:2", {
+      access_token: "member-user-token",
+      expires_at: null,
+    });
+    const settings = {
+      ...member.settings,
+      allowanceConfirmed: true,
+      includedMinutes: 2000,
+      contributionMinutes: 1500,
+      reserveMinutes: 400,
+      priority: 2,
+      concurrency: 3,
+    };
+    const result = await server.inject({
+      method: "PUT",
+      url: "/api/accounts/2",
+      headers,
+      cookies,
+      payload: settings,
+    });
+    expect(result.statusCode).toBe(200);
+    expect(store.get("account", "2", accountSchema)?.settings).toEqual(
+      settings,
+    );
+    expect(
+      new Headers(fetcher.mock.calls[0]?.[1]?.headers).get("authorization"),
+    ).toBe("Bearer member-user-token");
+  });
   it("verifies owner-wide usage and repository access after saving own limits", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
@@ -594,6 +632,25 @@ describe("provider management and test planning", () => {
         })
       ).statusCode,
     ).toBe(400);
+  });
+  it("accepts a real 3000-suite HTTP request and preserves every suite once", async () => {
+    const { server, headers, cookies } = await make({ signedIn: true });
+    const suites = Array.from({ length: 3000 }, (_, index) => ({
+      name: `src/modules/suite-${index}.test.ts`,
+      seconds: (index % 60) + 1,
+    }));
+    const result = await server.inject({
+      method: "POST",
+      url: "/api/tests/plan",
+      headers,
+      cookies,
+      payload: { groups: 3, suites },
+    });
+    expect(result.statusCode).toBe(200);
+    const groups = result.json<{ groups: { suites: string[] }[] }>().groups;
+    const names = groups.flatMap((group) => group.suites);
+    expect(new Set(names).size).toBe(3000);
+    expect(names).toHaveLength(3000);
   });
   it("does not expose a raw arbitrary dispatch endpoint", async () => {
     const { server, cookies, headers } = await make({ signedIn: true });

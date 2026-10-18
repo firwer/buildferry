@@ -41,7 +41,12 @@ export function executionCapacity(
   const periodJobs = jobs.filter(
     (value) => value.period === currentPeriod() || holdsSlot(value),
   );
-  const candidates = candidatesFor(accounts, providers).map((candidate) => {
+  const candidates = candidatesFor(
+    accounts,
+    providers,
+    Date.now(),
+    job.ubicloudRunner ?? job.recipe.ubicloudRunner,
+  ).map((candidate) => {
     const id = candidate.id.split(":")[1];
     if (candidate.kind === "github") {
       const accountId = Number(id);

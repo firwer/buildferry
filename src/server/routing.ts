@@ -6,6 +6,7 @@ import type {
   Provider,
   ShardInput,
   ShardResult,
+  UbicloudRunner,
 } from "../shared/contracts.js";
 
 export const currentPeriod = (now = Date.now()) =>
@@ -16,7 +17,7 @@ function accountReason(account: Account, now: number): string | null {
   if (account.settings.state !== "active")
     return `Account is ${account.settings.state}.`;
   if (!account.settings.allowanceConfirmed)
-    return "The owner has not confirmed the allowance.";
+    return "Confirm this account's monthly minutes.";
   if (account.period !== currentPeriod(now))
     return "Refresh usage for this month.";
   if (
@@ -35,6 +36,7 @@ export function candidatesFor(
   accounts: readonly Account[],
   providers: readonly Provider[],
   now = Date.now(),
+  ubicloudRunner?: UbicloudRunner,
 ): Candidate[] {
   const native = accounts.map((account) => ({
     id: `github:${account.id}`,
@@ -76,23 +78,33 @@ export function candidatesFor(
     memoryGiB: 8,
     reason: accountReason(account, now),
   }));
-  const external = providers.map((provider) => ({
-    id: `ubicloud:${provider.projectId}:${provider.runner}`,
-    name: provider.name,
-    kind: "ubicloud" as const,
-    runner: provider.runner,
-    priority: provider.priority,
-    weight: 1,
-    concurrency: 4,
-    availableMinutes: 1_000_000,
-    availableMicros: provider.budgetMicros,
-    rateMicros: provider.rateMicros,
-    memoryGiB: Number(provider.runner.split("-").at(-1)) * 4,
-    reason:
-      now - provider.verifiedAt > freshnessMs
-        ? "Refresh this provider connection."
-        : null,
-  }));
+  const external = providers.map((provider) => {
+    const runner = ubicloudRunner ?? provider.runner;
+    const rateMicros =
+      runner === provider.runner
+        ? provider.rateMicros
+        : provider.machineRates?.find((machine) => machine.runner === runner)
+            ?.rateMicros;
+    return {
+      id: `ubicloud:${provider.projectId}:${runner}`,
+      name: provider.name,
+      kind: "ubicloud" as const,
+      runner,
+      priority: provider.priority,
+      weight: 1,
+      concurrency: 4,
+      availableMinutes: 1_000_000,
+      availableMicros: provider.budgetMicros,
+      rateMicros: rateMicros ?? 0,
+      memoryGiB: Number(runner.split("-").at(-1)) * 4,
+      reason:
+        rateMicros === undefined
+          ? "Set a rate for the selected Ubicloud machine in Connections."
+          : now - provider.verifiedAt > freshnessMs
+            ? "Refresh this provider connection."
+            : null,
+    };
+  });
   return [...native, ...external];
 }
 

@@ -39,24 +39,61 @@ export const accountSchema = z.object({
 export type Account = z.infer<typeof accountSchema>;
 export type AccountSettings = z.infer<typeof accountSettingsSchema>;
 
-export const providerInputSchema = z
+export const ubicloudRunnerSchema = z.enum([
+  "ubicloud-standard-2",
+  "ubicloud-standard-4",
+  "ubicloud-standard-8",
+]);
+export type UbicloudRunner = z.infer<typeof ubicloudRunnerSchema>;
+export const ubicloudMachines: ReadonlyArray<{
+  runner: UbicloudRunner;
+  label: string;
+}> = [
+  { runner: "ubicloud-standard-2", label: "2 CPUs / 8 GB" },
+  { runner: "ubicloud-standard-4", label: "4 CPUs / 16 GB" },
+  { runner: "ubicloud-standard-8", label: "8 CPUs / 32 GB" },
+];
+const runnerRateSchema = z
   .object({
-    projectId: z.string().regex(/^pj[0-9a-hj-km-np-tv-z]{24}$/),
-    token: z.string().min(10).max(4096),
-    runner: z.enum([
-      "ubicloud-standard-2",
-      "ubicloud-standard-4",
-      "ubicloud-standard-8",
-    ]),
-    priority,
+    runner: ubicloudRunnerSchema,
     rateMicros: micros.refine(
       (value) => value > 0,
       "Enter the actual runner rate.",
     ),
-    budgetMicros: micros,
   })
   .strict();
-export const providerSchema = providerInputSchema.omit({ token: true }).extend({
+const providerSettingsFields = {
+  runner: ubicloudRunnerSchema,
+  priority,
+  rateMicros: runnerRateSchema.shape.rateMicros,
+  budgetMicros: micros,
+  machineRates: z.array(runnerRateSchema).max(2).optional(),
+};
+function uniqueMachineRates(value: {
+  runner: UbicloudRunner;
+  machineRates?: { runner: UbicloudRunner }[];
+}): boolean {
+  const runners = [
+    value.runner,
+    ...(value.machineRates ?? []).map((machine) => machine.runner),
+  ];
+  return new Set(runners).size === runners.length;
+}
+export const providerSettingsSchema = z
+  .object(providerSettingsFields)
+  .strict()
+  .refine(uniqueMachineRates, "Enter one rate per machine.");
+export const providerInputSchema = z
+  .object({
+    projectId: z.string().regex(/^pj[0-9a-hj-km-np-tv-z]{24}$/),
+    token: z.string().min(10).max(4096),
+    ...providerSettingsFields,
+  })
+  .strict()
+  .refine(uniqueMachineRates, "Enter one rate per machine.");
+export const providerSchema = z.object({
+  projectId: providerInputSchema.shape.projectId,
+  ...providerSettingsFields,
   name: z.string(),
   installations: z.array(z.object({ id: z.string(), name: z.string() })),
   verifiedAt: z.number(),
@@ -142,8 +179,9 @@ export const shardResultSchema = z.object({
 export type ShardResult = z.infer<typeof shardResultSchema>;
 
 export const sessionSchema = z.object({
-  stage: z.enum(["claim", "setup", "login", "dashboard"]),
+  stage: z.enum(["claim", "setup", "login", "connected", "dashboard"]),
   demo: z.boolean(),
+  passwordLogin: z.boolean().optional(),
   csrf: z.string(),
   user: z
     .object({

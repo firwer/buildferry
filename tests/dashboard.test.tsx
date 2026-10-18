@@ -16,6 +16,7 @@ import { currentPeriod } from "../src/server/routing.js";
 import { api, loadSession } from "../src/web/api.js";
 import { fixture, projectId, response, sampleApp } from "./fixtures.js";
 import { z } from "zod";
+import { scryptSync } from "node:crypto";
 import { project, worker, sourceSha } from "./execution-fixtures.js";
 
 const apps: Awaited<ReturnType<typeof fixture>>[] = [];
@@ -39,8 +40,12 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function mount(signedIn = true, fetcher?: typeof fetch) {
-  const app = await fixture({ signedIn, fetcher });
+async function mount(
+  signedIn = true,
+  fetcher?: typeof fetch,
+  config?: NonNullable<Parameters<typeof fixture>[0]>["config"],
+) {
+  const app = await fixture({ signedIn, fetcher, config });
   apps.push(app);
   if (signedIn) app.store.setSecret("github-app", sampleApp);
   vi.stubGlobal(
@@ -79,6 +84,26 @@ async function mount(signedIn = true, fetcher?: typeof fetch) {
 }
 
 describe("dashboard journeys", () => {
+  it("keeps GitHub account connection separate from administrator password sign-in", async () => {
+    const salt = Buffer.alloc(32, 7);
+    const password = "synthetic-admin-password";
+    const { user } = await mount(true, undefined, {
+      admin: {
+        username: "admin",
+        salt,
+        passwordHash: scryptSync(password, salt, 64),
+      },
+    });
+    expect(await screen.findByText("You are all set")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Team accounts" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Return to sign in" }));
+    await user.type(await screen.findByLabelText("Username"), "admin");
+    await user.type(screen.getByLabelText("Password"), password);
+    await user.click(screen.getByRole("button", { name: /^Sign in$/ }));
+    expect(
+      await screen.findByRole("button", { name: "Team accounts" }),
+    ).toBeTruthy();
+  });
   it("shows real empty states and connects an approved workload without seeded runs", async () => {
     const { user, execution, store } = await mount();
     vi.spyOn(execution.service.credentials, "token").mockResolvedValue(
@@ -148,6 +173,10 @@ describe("dashboard journeys", () => {
       sourceSha,
     );
     await user.selectOptions(screen.getByLabelText("Capacity"), "ubicloud");
+    await user.selectOptions(
+      screen.getByLabelText("Ubicloud machine"),
+      "ubicloud-standard-2",
+    );
     await user.click(screen.getByRole("button", { name: "Queue run" }));
     expect(
       await screen.findByRole("button", { name: "Cancel run" }),
@@ -156,6 +185,7 @@ describe("dashboard journeys", () => {
       sourceSha,
       route: "ubicloud",
       state: "queued",
+      ubicloudRunner: "ubicloud-standard-2",
     });
     await user.click(screen.getByRole("button", { name: "Edit Build" }));
     await user.clear(screen.getByLabelText(/Approved commands, one per line/));
@@ -163,12 +193,22 @@ describe("dashboard journeys", () => {
       screen.getByLabelText(/Approved commands, one per line/),
       "npm run build",
     );
+    await user.selectOptions(
+      screen.getByLabelText("Ubicloud machine"),
+      "ubicloud-standard-4",
+    );
     await user.click(screen.getByRole("button", { name: "Save workload" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(execution.service.jobs()[0]?.recipe.commands).toEqual([
       "npm ci",
       "npm test",
     ]);
+    expect(execution.service.jobs()[0]?.ubicloudRunner).toBe(
+      "ubicloud-standard-2",
+    );
+    expect(execution.service.projects()[0]?.recipe.ubicloudRunner).toBe(
+      "ubicloud-standard-4",
+    );
     await user.click(screen.getByRole("button", { name: "Cancel run" }));
     expect(await screen.findByText("cancelled")).toBeTruthy();
     expect(execution.service.jobs()[0]).toMatchObject({
@@ -200,7 +240,7 @@ describe("dashboard journeys", () => {
     await user.click(await screen.findByLabelText("owner/source / Build"));
     await user.click(
       screen.getByRole("button", {
-        name: "Install worker and approve projects",
+        name: "Set up worker",
       }),
     );
     expect(
@@ -230,7 +270,7 @@ describe("dashboard journeys", () => {
     expect((await screen.findAllByText("Waiting for capacity")).length).toBe(2);
     await user.click(screen.getByText("Why other capacity may be unavailable"));
     expect(
-      screen.getByText("The owner has not confirmed the allowance."),
+      screen.getByText("Confirm this account's monthly minutes."),
     ).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Test planner" }));
     await user.clear(screen.getByLabelText("Suites and seconds"));
@@ -301,10 +341,11 @@ describe("dashboard journeys", () => {
       expires_at: null,
     });
     await user.click(await screen.findByRole("button", { name: "Edit owner" }));
+    await user.click(screen.getByText("Advanced settings"));
     for (const [label, value] of [
-      ["Included minutes", "3000"],
-      ["Contribution limit", "500"],
-      ["Personal reserve", "400"],
+      ["Monthly minutes", "3000"],
+      ["Minutes available to BuildFerry", "500"],
+      ["Keep for other work", "400"],
       ["Priority level", "2"],
       ["Share weight", "3"],
       ["Parallel jobs", "2"],
@@ -320,11 +361,6 @@ describe("dashboard journeys", () => {
     await user.selectOptions(
       screen.getByLabelText("Contribution status"),
       "paused",
-    );
-    await user.click(
-      screen.getByLabelText(
-        "I confirm this allowance resets each calendar month.",
-      ),
     );
     await user.click(screen.getByRole("button", { name: "Save settings" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -356,13 +392,16 @@ describe("dashboard journeys", () => {
       screen.getByRole("heading", { name: "Add your fallback provider" }),
     ).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Connect Ubicloud" }));
+    expect(
+      screen.getByLabelText<HTMLSelectElement>("Default machine").value,
+    ).toBe("ubicloud-standard-2");
     await user.type(screen.getByLabelText("Project ID"), projectId);
     await user.type(
       screen.getByLabelText("Project access token"),
       "fixture-ubicloud-token",
     );
     await user.selectOptions(
-      screen.getByLabelText("Runner size"),
+      screen.getByLabelText("Default machine"),
       "ubicloud-standard-8",
     );
     await user.clear(screen.getByLabelText("Priority level"));
@@ -383,6 +422,26 @@ describe("dashboard journeys", () => {
       priority: 3,
     });
     await user.click(
+      screen.getByRole("button", { name: "Edit Example cloud" }),
+    );
+    expect(screen.queryByLabelText("Project access token")).toBeNull();
+    await user.selectOptions(
+      screen.getByLabelText("Default machine"),
+      "ubicloud-standard-2",
+    );
+    expect(
+      screen.getByLabelText<HTMLInputElement>(/Actual rate per minute/).value,
+    ).toBe("");
+    await user.type(screen.getByLabelText(/Actual rate per minute/), "0.002");
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(store.get("provider", projectId, providerSchema)).toMatchObject({
+      runner: "ubicloud-standard-2",
+      rateMicros: 2000,
+      budgetMicros: 5_000_000,
+      machineRates: [{ runner: "ubicloud-standard-8", rateMicros: 8000 }],
+    });
+    await user.click(
       screen.getByRole("button", { name: "Refresh Example cloud" }),
     );
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(4));
@@ -393,7 +452,7 @@ describe("dashboard journeys", () => {
     );
   });
 
-  it("creates a one-use invitation and allows only the owner to edit its contribution", async () => {
+  it("creates a one-use invitation and lets the administrator edit team accounts", async () => {
     const { user, store } = await mount();
     store.put("account", "2", {
       ...newAccount(2, "teammate", "member"),
@@ -411,7 +470,15 @@ describe("dashboard journeys", () => {
     ).toBe(true);
     await user.click(input);
     expect(input.selectionEnd).toBe(input.value.length);
-    expect(screen.queryByRole("button", { name: "Edit teammate" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Edit teammate" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Edit teammate" }));
+    await user.clear(screen.getByLabelText("Keep for other work"));
+    await user.type(screen.getByLabelText("Keep for other work"), "450");
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(
+      store.get("account", "2", accountSchema)?.settings.reserveMinutes,
+    ).toBe(450);
     vi.spyOn(window, "confirm").mockReturnValue(true);
     await user.click(
       await screen.findByRole("button", { name: "Disconnect account" }),

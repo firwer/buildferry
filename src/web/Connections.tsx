@@ -5,30 +5,64 @@ import type { SubmitEvent } from "react";
 import { z } from "zod";
 import {
   providerSchema,
+  ubicloudMachines,
   type Dashboard,
+  type Provider,
   type SessionView,
 } from "../shared/contracts.js";
 import { api, money } from "./api.js";
 import { Busy, Dialog, Empty, External, Failure } from "./components.js";
 
-function ProviderForm({ onClose }: Readonly<{ onClose: () => void }>) {
+function ProviderForm({
+  provider,
+  onClose,
+}: Readonly<{ provider?: Provider; onClose: () => void }>) {
   const client = useQueryClient();
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(provider?.projectId ?? "");
   const [token, setToken] = useState("");
-  const [runner, setRunner] = useState("ubicloud-standard-4");
-  const [priority, setPriority] = useState(2);
-  const [rate, setRate] = useState("");
-  const [budget, setBudget] = useState(0);
+  const [runner, setRunner] = useState<string>(
+    provider?.runner ?? "ubicloud-standard-2",
+  );
+  const [priority, setPriority] = useState(provider?.priority ?? 2);
+  const [rates, setRates] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      provider
+        ? [
+            { runner: provider.runner, rateMicros: provider.rateMicros },
+            ...(provider.machineRates ?? []),
+          ].map((machine) => [
+            machine.runner,
+            String(machine.rateMicros / 1_000_000),
+          ])
+        : [],
+    ),
+  );
+  const [budget, setBudget] = useState(
+    (provider?.budgetMicros ?? 0) / 1_000_000,
+  );
   const connect = useMutation({
     mutationFn: () =>
-      api("/api/providers", providerSchema, "POST", {
-        projectId,
-        token,
-        runner,
-        priority,
-        rateMicros: Math.round(Number(rate) * 1_000_000),
-        budgetMicros: Math.round(budget * 1_000_000),
-      }),
+      api(
+        provider ? `/api/providers/${provider.projectId}` : "/api/providers",
+        providerSchema,
+        provider ? "PUT" : "POST",
+        {
+          ...(provider ? {} : { projectId, token }),
+          runner,
+          priority,
+          rateMicros: Math.round(Number(rates[runner]) * 1_000_000),
+          budgetMicros: Math.round(budget * 1_000_000),
+          machineRates: ubicloudMachines
+            .filter(
+              (machine) =>
+                machine.runner !== runner && rates[machine.runner]?.trim(),
+            )
+            .map((machine) => ({
+              runner: machine.runner,
+              rateMicros: Math.round(Number(rates[machine.runner]) * 1_000_000),
+            })),
+        },
+      ),
     onSuccess: async () => {
       setToken("");
       await client.invalidateQueries({ queryKey: ["dashboard"] });
@@ -40,41 +74,50 @@ function ProviderForm({ onClose }: Readonly<{ onClose: () => void }>) {
     connect.mutate();
   }
   return (
-    <Dialog title="Connect Ubicloud" onClose={onClose}>
+    <Dialog
+      title={provider ? "Ubicloud settings" : "Connect Ubicloud"}
+      onClose={onClose}
+    >
       <p className="panel-intro">
-        Connect its GitHub runner app to your CI repository in Ubicloud first.
-        This step verifies project access without starting a runner.
+        Choose the default machine for paid fallback. BuildFerry never increases
+        its size automatically. Saving does not start a runner.
       </p>
       <form className="form-grid" onSubmit={submit}>
-        <label className="full">
-          <span>Project ID</span>
-          <input
-            required
-            value={projectId}
-            maxLength={26}
-            onChange={(event) => setProjectId(event.target.value)}
-            placeholder="pj..."
-          />
-        </label>
-        <label className="full">
-          <span>Project access token</span>
-          <input
-            type="password"
-            required
-            autoComplete="off"
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-          />
-        </label>
+        {!provider && (
+          <>
+            <label className="full">
+              <span>Project ID</span>
+              <input
+                required
+                value={projectId}
+                maxLength={26}
+                onChange={(event) => setProjectId(event.target.value)}
+                placeholder="pj..."
+              />
+            </label>
+            <label className="full">
+              <span>Project access token</span>
+              <input
+                type="password"
+                required
+                autoComplete="off"
+                value={token}
+                onChange={(event) => setToken(event.target.value)}
+              />
+            </label>
+          </>
+        )}
         <label>
-          <span>Runner size</span>
+          <span>Default machine</span>
           <select
             value={runner}
             onChange={(event) => setRunner(event.target.value)}
           >
-            <option value="ubicloud-standard-2">2 CPUs / 8 GB</option>
-            <option value="ubicloud-standard-4">4 CPUs / 16 GB</option>
-            <option value="ubicloud-standard-8">8 CPUs / 32 GB</option>
+            {ubicloudMachines.map((machine) => (
+              <option key={machine.runner} value={machine.runner}>
+                {machine.label}
+              </option>
+            ))}
           </select>
         </label>
         <label>
@@ -95,11 +138,44 @@ function ProviderForm({ onClose }: Readonly<{ onClose: () => void }>) {
             required
             min="0.000001"
             step="0.000001"
-            value={rate}
-            onChange={(event) => setRate(event.target.value)}
+            value={rates[runner] ?? ""}
+            onChange={(event) =>
+              setRates({ ...rates, [runner]: event.target.value })
+            }
           />
-          <small>Use the rate for your standard or premium tier.</small>
+          <small>
+            Use your Ubicloud account's rate for this machine. Its hardware tier
+            is set in Ubicloud.
+          </small>
         </label>
+        <details className="full">
+          <summary>Other machines for job overrides</summary>
+          <p className="fine-print">
+            Add a rate to allow a job to select another size. Leave blank to
+            keep it unavailable.
+          </p>
+          <div className="form-grid">
+            {ubicloudMachines
+              .filter((machine) => machine.runner !== runner)
+              .map((machine) => (
+                <label key={machine.runner}>
+                  <span>{machine.label} rate per minute ($)</span>
+                  <input
+                    type="number"
+                    min="0.000001"
+                    step="0.000001"
+                    value={rates[machine.runner] ?? ""}
+                    onChange={(event) =>
+                      setRates({
+                        ...rates,
+                        [machine.runner]: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+              ))}
+          </div>
+        </details>
         <label>
           <span>Monthly spend limit ($)</span>
           <input
@@ -116,7 +192,9 @@ function ProviderForm({ onClose }: Readonly<{ onClose: () => void }>) {
           <Failure error={connect.error} />
           <button className="button primary" disabled={connect.isPending}>
             {connect.isPending ? (
-              <Busy>Verifying project</Busy>
+              <Busy>Saving settings</Busy>
+            ) : provider ? (
+              "Save settings"
             ) : (
               "Verify and save connection"
             )}
@@ -133,6 +211,7 @@ export function Connections({
 }: Readonly<{ data: Dashboard; session: SessionView }>) {
   const client = useQueryClient();
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Provider | null>(null);
   const canEdit = session.user?.role === "owner" && !session.demo;
   const refresh = useMutation({
     mutationFn: (id: string) =>
@@ -172,9 +251,14 @@ export function Connections({
               <div>
                 <h3>{provider.name}</h3>
                 <p>
-                  Ubicloud / {provider.runner.replace("ubicloud-standard-", "")}{" "}
-                  CPUs<span className="inline-separator">·</span>
-                  {money(provider.rateMicros)} per minute
+                  Default:{" "}
+                  {
+                    ubicloudMachines.find(
+                      (machine) => machine.runner === provider.runner,
+                    )?.label
+                  }
+                  <span className="inline-separator">·</span>
+                  {money(provider.rateMicros, 6)} per minute (estimate)
                 </p>
               </div>
               <div className="provider-budget">
@@ -184,6 +268,12 @@ export function Connections({
               <span className="tier">Priority {provider.priority}</span>
               {canEdit && (
                 <>
+                  <button
+                    className="button secondary"
+                    onClick={() => setEditing(provider)}
+                  >
+                    Edit {provider.name}
+                  </button>
                   <button
                     className="icon-button"
                     aria-label={`Refresh ${provider.name}`}
@@ -214,6 +304,9 @@ export function Connections({
         each approved worker repository before requesting a run.
       </p>
       {adding && <ProviderForm onClose={() => setAdding(false)} />}
+      {editing && (
+        <ProviderForm provider={editing} onClose={() => setEditing(null)} />
+      )}
     </section>
   );
 }
@@ -232,8 +325,8 @@ export function TeamSettings({ session }: Readonly<{ session: SessionView }>) {
         </div>
       </div>
       <p className="panel-intro">
-        Each person signs in with their own GitHub account and sets the minutes
-        they want to contribute. Invitation links expire in one hour and can be
+        Each person connects their GitHub account once. You manage its minutes,
+        reserve and worker here. Invitation links expire in one hour and can be
         used once.
       </p>
       {session.user?.role === "owner" && (

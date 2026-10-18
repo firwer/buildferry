@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { repositorySchema, loginSchema } from "./contracts.js";
+import {
+  repositorySchema,
+  loginSchema,
+  ubicloudRunnerSchema,
+} from "./contracts.js";
 
 export const shaSchema = z.string().regex(/^[a-f0-9]{40}$/);
 export const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -26,6 +30,7 @@ export const recipeSchema = z
     maxMinutes: z.number().int().min(2).max(180),
     memoryGiB: z.number().int().min(1).max(64),
     maxCostMicros: z.number().int().min(0).max(1_000_000_000),
+    ubicloudRunner: ubicloudRunnerSchema.optional(),
   })
   .strict();
 export type Recipe = z.infer<typeof recipeSchema>;
@@ -83,6 +88,7 @@ export const jobSchema = z.object({
   accountId: z.number().int().positive().nullable(),
   providerId: z.string().nullable(),
   runner: z.string().nullable(),
+  ubicloudRunner: ubicloudRunnerSchema.optional(),
   worker: workerSchema.nullable(),
   remoteRunId: z.number().int().positive().nullable(),
   checkId: z.number().int().positive().nullable(),
@@ -111,6 +117,7 @@ export const enqueueSchema = z
     sha: shaSchema.optional(),
     priority: z.number().int().min(1).max(5).default(3),
     route: z.enum(["auto", "github", "ubicloud"]).default("auto"),
+    ubicloudRunner: ubicloudRunnerSchema.optional(),
   })
   .strict();
 export const executionDashboardSchema = z.object({
