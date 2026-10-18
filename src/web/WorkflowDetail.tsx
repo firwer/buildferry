@@ -14,13 +14,20 @@ import { DependencyMap } from "./DependencyMap.js";
 import { replaceNativeRepository } from "./native-data.js";
 import { JobOverridePanel, WorkflowPolicyForm } from "./RoutePolicyEditor.js";
 
+function routingLabel(job: NativeWorkflow["jobs"][number]) {
+  if (job.reusable) return "Uses another workflow";
+  return job.integrated ? "BuildFerry runner" : "Not using BuildFerry";
+}
+
 function JobBadges({ job }: Readonly<{ job: NativeWorkflow["jobs"][number] }>) {
   return (
     <span className="job-badges">
-      <span className={job.integrated ? "badge connected" : "badge unrouted"}>
-        {job.integrated ? "BuildFerry runner" : "Not using BuildFerry"}
-      </span>
-      {job.reusable && <span className="badge warning">Reusable workflow</span>}
+      {!job.reusable && (
+        <span className={job.integrated ? "badge connected" : "badge unrouted"}>
+          {routingLabel(job)}
+        </span>
+      )}
+      {job.reusable && <span className="badge">Uses another workflow</span>}
       {!job.supported && !job.reusable && (
         <span className="badge warning">Unsupported</span>
       )}
@@ -160,9 +167,11 @@ export function WorkflowDetail({
                   <small>{job.key}</small>
                 </span>
                 <span className="job-row-runner">
-                  {job.integrated
-                    ? "BuildFerry connected"
-                    : "Uses current runner"}
+                  {job.reusable && "Uses another workflow"}
+                  {!job.reusable &&
+                    (job.integrated
+                      ? "BuildFerry connected"
+                      : "Uses current runner")}
                 </span>
                 <JobBadges job={job} />
               </button>
@@ -269,7 +278,7 @@ function JobFacts({ job }: Readonly<{ job: NativeWorkflow["jobs"][number] }>) {
       </div>
       <div>
         <dt>Routing</dt>
-        <dd>{job.integrated ? "BuildFerry runner" : "Not using BuildFerry"}</dd>
+        <dd>{routingLabel(job)}</dd>
       </div>
       <div>
         <dt>Workflow type</dt>

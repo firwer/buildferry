@@ -164,7 +164,9 @@ describe("native repository workflow UI", () => {
     expect(screen.getAllByText("BuildFerry runner").length).toBeGreaterThan(0);
     for (const badge of screen.getAllByText("Not using BuildFerry"))
       expect(badge.className).toContain("unrouted");
-    expect(screen.getAllByText("Reusable workflow").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Uses another workflow").length).toBeGreaterThan(
+      0,
+    );
     expect(screen.getAllByText("Unsupported").length).toBeGreaterThan(0);
     expect(screen.getByText("Env: production")).toBeTruthy();
     await user.click(
@@ -199,6 +201,31 @@ describe("native repository workflow UI", () => {
     );
     expect(document.querySelector(".repository-browser.compact")).toBeNull();
     expect(screen.getByRole("heading", { name: "CI", level: 2 })).toBeTruthy();
+  });
+
+  it("does not label workflow calls as jobs bypassing the router", async () => {
+    const state: FetchState = {
+      dashboard: nativeDashboardFixture(),
+      requests: [],
+    };
+    const { user } = mount(<Repositories session={nativeSession} />, state);
+    const row = await screen.findByRole("button", {
+      name: "Configure Reusable checks job",
+    });
+    expect(row.querySelector(".unrouted")).toBeNull();
+    const node = screen.getByRole("button", {
+      name: /Reusable checks job\. Needs checkout\. Native integration called workflow\./,
+    });
+    expect(node.querySelector(".unrouted")).toBeNull();
+    expect(node.textContent).toContain("Uses another workflow");
+    await user.click(row);
+    expect(document.querySelector(".settings-panel .unrouted")).toBeNull();
+    expect(
+      screen.getAllByText("Choose the jobs inside the called workflow.").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("Not using BuildFerry").length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("saves ordered workflow defaults and preserves existing job overrides", async () => {
