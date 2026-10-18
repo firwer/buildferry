@@ -168,7 +168,7 @@ export function Setup({ session }: Readonly<{ session: SessionView }>) {
       </div>
       <footer className="welcome-footer">
         Self-hosted. Built for your team.{" "}
-        <span>Early access / Connections and previews</span>
+        <span>Shared CI / Your infrastructure</span>
       </footer>
     </main>
   );

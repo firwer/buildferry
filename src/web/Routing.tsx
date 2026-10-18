@@ -146,9 +146,7 @@ export function Routing() {
 
 export function TestPlanner() {
   const [groups, setGroups] = useState(2);
-  const [text, setText] = useState(
-    "auth.test, 180\norders.test, 120\ninventory.test, 95\naccounts.test, 80\nsearch.test, 60\nnotifications.test, 45",
-  );
+  const [text, setText] = useState("");
   const plan = useMutation({
     mutationFn: () => {
       const suites = text

@@ -215,7 +215,7 @@ function AccountCard({
       </div>
       <div className="account-capacity">
         <strong>{number(available)}</strong>
-        <span>minutes available for previews</span>
+        <span>verified minutes before queued reservations</span>
       </div>
       <progress
         max={Math.max(account.settings.includedMinutes, 1)}

@@ -22,11 +22,15 @@ import { equalSecret, nonce } from "./crypto.js";
 import { registerAuth, registerWebhook } from "./auth.js";
 import { registerApi } from "./api.js";
 import { seedDemo } from "./demo.js";
+import { registerExecution } from "./execution-api.js";
+import type { VerifyWorkerIdentity } from "./worker-identity.js";
 
 type Options = Readonly<{
   store?: Store;
   fetcher?: typeof fetch;
   claimCode?: string;
+  verifyWorkerIdentity?: VerifyWorkerIdentity;
+  startController?: boolean;
 }>;
 
 function errorStatus(error: unknown): number {
@@ -43,7 +47,7 @@ function errorStatus(error: unknown): number {
   return 500;
 }
 
-/** A read-only provider integration: the only writes are local configuration and OAuth. */
+/** Authenticated dashboard and durable, independently verified worker execution. */
 export async function createApp(config: Config, options: Options = {}) {
   if (!config.demo) mkdirSync(config.dataDir, { recursive: true, mode: 0o700 });
   const store =
@@ -66,6 +70,7 @@ export async function createApp(config: Config, options: Options = {}) {
     logger: false,
     bodyLimit: 64 * 1024,
     requestTimeout: 20_000,
+    trustProxy: (_address: string, hop: number) => hop < config.trustProxyHops,
   });
   await server.register(cookie);
   await server.register(helmet, {
@@ -89,7 +94,12 @@ export async function createApp(config: Config, options: Options = {}) {
       ? { maxAge: 31536000 }
       : false,
   });
-  await server.register(rateLimit, { max: 120, timeWindow: "1 minute" });
+  await server.register(rateLimit, {
+    max: 120,
+    timeWindow: "1 minute",
+    allowList: (request) =>
+      request.method === "GET" && request.url.startsWith("/assets/"),
+  });
   server.addHook("onRequest", async (request, reply) => {
     if (!request.url.startsWith("/assets/"))
       reply.header("Cache-Control", "no-store");
@@ -104,7 +114,9 @@ export async function createApp(config: Config, options: Options = {}) {
     return reply.code(status).send({ error: message });
   });
   server.addHook("preHandler", async (request) => {
-    const pathname = request.url.split("?").at(0) ?? "";
+    const pathname = request.routeOptions.url ?? "";
+    if (["/api/worker/claim", "/api/worker/prepared"].includes(pathname))
+      return;
     if (!pathname.startsWith("/api/") || pathname === "/api/github/webhook")
       return;
     const mutation = !["GET", "HEAD", "OPTIONS"].includes(request.method);
@@ -138,10 +150,16 @@ export async function createApp(config: Config, options: Options = {}) {
   server.get("/healthz", async () => ({ status: "ok" }));
   server.get("/readyz", async () => {
     store.db.prepare("SELECT 1").get();
-    return { status: "ready", execution: "disabled" };
+    return { status: "ready", execution: config.demo ? "disabled" : "enabled" };
   });
   registerAuth(server, context, claimCode);
   registerApi(server, context);
+  const execution = registerExecution(server, context, {
+    verifyIdentity: options.verifyWorkerIdentity,
+    startController:
+      options.startController ??
+      (process.env.NODE_ENV !== "test" && !config.demo),
+  });
   await registerWebhook(server, context);
   const webRoot = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -158,7 +176,8 @@ export async function createApp(config: Config, options: Options = {}) {
   pruning.unref();
   server.addHook("onClose", async () => {
     clearInterval(pruning);
+    await execution.stop();
     store.close();
   });
-  return { server, store, claimCode };
+  return { server, store, claimCode, execution };
 }

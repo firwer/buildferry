@@ -1,20 +1,20 @@
 # BuildFerry
 
-BuildFerry brings a team's CI capacity into one self-hosted dashboard. Connect account owners, keep personal reserves, arrange fallback priorities, and plan balanced test groups.
+BuildFerry routes independent builds and tests across a team's GitHub accounts, with Ubicloud as budgeted fallback. Each owner keeps control of their contribution, reserve, approved projects and parallel slots.
 
-**Status: early preview.** The first implementation supports connections and planning. It does **not** dispatch workflows, execute tests, write project checks, or deploy releases. Existing CI stays in place. See the [implementation status](docs/implementation-status.md) and [MVP plan](docs/mvp-plan.md) for the remaining work.
+**Status: execution release candidate.** The implementation includes real workflow dispatch, a persistent queue, minute and spending reservations, worker provisioning, verified results and cancellation. Live two-owner onboarding and deployment validation are still pending. Existing project workflows and release gates stay in place; their migration is a separate reviewed step. See [implementation status](docs/implementation-status.md).
 
-## Try the local demo
+## Run locally
 
 With Node 24 LTS and pnpm 10.26.1:
 
 ```sh
-pnpm install --frozen-lockfile
+pnpm install --frozen-lockfile --ignore-scripts
 pnpm build
-pnpm demo
+pnpm start
 ```
 
-Open http://localhost:8787. Sample accounts are synthetic, stored in memory, and cannot contact providers or change connections. Routing and test-group previews work without credentials.
+Open http://localhost:8787. A fresh installation has no accounts, workloads or runs. Read its one-use setup code from startup logs. Public HTTPS is required for real GitHub setup and worker callbacks. Fixture data is available only through the isolated browser-test command.
 
 ## Self-host
 
@@ -33,11 +33,17 @@ The default Compose file exposes port 8787 on loopback and retains configuration
 
 - GitHub App manifest setup, protected sign-in, one-use team invitations, and expiring user-token refresh.
 - Multiple personal account connections, owner-confirmed allowances, contribution ceilings, reserves, priorities, weights, and parallel-slot limits.
-- Owner-wide Linux usage and private repository verification, with stale or unsupported usage excluded from previews.
-- Ubicloud project and GitHub installation verification, configurable runner sizes, entered rates, and preview budgets.
-- Budget-aware routing previews and deterministic test grouping from suite timings.
+- Owner-wide Linux usage and private repository verification, refreshed automatically while jobs are queued.
+- Per-owner private workers with explicit project consent, pinned launcher revisions and narrowly scoped checkout credentials revoked before project commands run.
+- Persistent priority queues, transactional worst-case reservations, parallel execution across accounts, uncertain-dispatch reconciliation and cancellation.
+- Ubicloud project, installation and worker-repository verification; configurable runner size, monthly spend limit and per-workload paid limit. AWS is not used.
+- Manual runs and opt-in default-branch push runs. Separate independent builds or test groups into named workloads using the dashboard.
+- Additional GitHub checks published only after independent run, step and immutable-checkout evidence verification. Worker logs, measured queue/command time, rounded minutes and configured-rate cost are visible in run history.
+- Explicit GitHub-only and Ubicloud benchmark routes for comparing the same revision and approved commands. No performance improvement is claimed without measurements.
 
-GitHub bills workflows to the repository owner; authorizing a second person does not move billing. Execution will require a private worker repository owned by each contributor. Public repositories already have free standard hosted runners. General cross-owner allowance-sharing policy remains an investigation item; this preview makes no claim of GitHub endorsement. [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
+GitHub bills each workflow to its repository owner. Every contributor creates a fresh private CI repository with a README, installs the instance's GitHub App on it, then approves the source workloads they will run. BuildFerry refuses to overwrite a repository with existing CI runs or workflows. Public source repositories already have free standard hosted runners. [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
+
+Reservations deliberately stay conservative when billing is delayed: completed BuildFerry usage remains counted locally, so it can temporarily overlap reported owner-wide usage. Keep GitHub's own spending controls and a reserve for workflows outside BuildFerry. The current test planner does not execute shards or merge coverage automatically. Keep those original checks until a reviewed integration proves complete results.
 
 ## Develop and contribute
 

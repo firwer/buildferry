@@ -42,3 +42,41 @@ export async function verifyUbicloud(
     installations: connections.items,
   } satisfies Pick<Provider, "name" | "installations">;
 }
+
+/** Verify the specific private worker is visible to the linked Ubicloud installation. */
+export async function verifyUbicloudWorker(
+  provider: Provider,
+  repository: string,
+  token: string,
+  fetcher: typeof fetch,
+): Promise<void> {
+  const [owner, name] = repository.split("/");
+  const installation = provider.installations.find(
+    (value) => value.name.toLowerCase() === owner?.toLowerCase(),
+  );
+  if (!installation || !name)
+    throw new ProviderError(
+      422,
+      "Connect this worker's owner to the Ubicloud project first.",
+    );
+  const worker = await providerJson(
+    fetcher,
+    `https://api.ubicloud.com/project/${encodeURIComponent(provider.projectId)}/github/${encodeURIComponent(installation.id)}/repository/${encodeURIComponent(name)}`,
+    z.object({
+      id: z.string(),
+      installation_name: z.string(),
+      name: z.string(),
+    }),
+    {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    },
+  );
+  if (
+    worker.installation_name.toLowerCase() !== owner?.toLowerCase() ||
+    worker.name.toLowerCase() !== name.toLowerCase()
+  )
+    throw new ProviderError(
+      422,
+      "Ubicloud returned a different worker repository.",
+    );
+}

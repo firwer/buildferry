@@ -1,6 +1,7 @@
 import { backup, DatabaseSync } from "node:sqlite";
 import path from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, linkSync, unlinkSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { loadConfig } from "./config.js";
 
 const destination = process.argv[2];
@@ -15,7 +16,18 @@ const database = new DatabaseSync(
   { readOnly: true },
 );
 try {
-  await backup(database, path.resolve(destination));
+  const target = path.resolve(destination);
+  const temporary = path.join(
+    path.dirname(target),
+    `.buildferry-backup-${randomUUID()}.sqlite`,
+  );
+  writeFileSync(temporary, "", { flag: "wx", mode: 0o600 });
+  try {
+    await backup(database, temporary);
+    linkSync(temporary, target);
+  } finally {
+    unlinkSync(temporary);
+  }
   console.log(
     "Database backup completed. Back up the credentials key separately.",
   );

@@ -9,6 +9,35 @@ export class ProviderError extends Error {
   }
 }
 
+/** Stop reading at the limit so an upstream response cannot exhaust dashboard memory. */
+export async function boundedBytes(
+  response: Response,
+  maximum: number,
+): Promise<Uint8Array> {
+  const reader = response.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const parts: Uint8Array[] = [];
+  let length = 0;
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      length += chunk.value.length;
+      if (length > maximum) {
+        await reader.cancel();
+        throw new ProviderError(
+          502,
+          "The provider returned an oversized response.",
+        );
+      }
+      parts.push(chunk.value);
+    }
+    return Buffer.concat(parts, length);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 /** Fixed provider hosts, no redirects, bounded requests, and validated response boundaries. */
 export async function providerJson<S extends z.ZodType>(
   fetcher: typeof fetch,
@@ -31,10 +60,8 @@ export async function providerJson<S extends z.ZodType>(
   }
   if (!response.ok) throw new ProviderError(response.status);
   try {
-    const text = await response.text();
-    if (Buffer.byteLength(text) > 8_000_000)
-      throw new Error("Oversized response");
-    return schema.parse(JSON.parse(text));
+    const bytes = await boundedBytes(response, 8_000_000);
+    return schema.parse(JSON.parse(Buffer.from(bytes).toString("utf8")));
   } catch {
     throw new ProviderError(
       502,

@@ -67,8 +67,10 @@ describe("GitHub App setup and OAuth", () => {
       manifest: { default_permissions: object };
     }>();
     expect(form.manifest.default_permissions).toEqual({
-      actions: "read",
-      contents: "read",
+      actions: "write",
+      contents: "write",
+      checks: "write",
+      workflows: "write",
       metadata: "read",
       plan: "read",
     });

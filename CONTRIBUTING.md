@@ -6,6 +6,6 @@ Keep changes small, use TypeScript with validated API boundaries, and add tests 
 
 Run `pnpm format` before submitting changes. Describe the behavior and validation in the pull request. Do not commit credentials, account usage exports, private source, local databases, or keys. Use fictional examples in public docs. New dependencies must earn their place.
 
-The source project's checks and release permissions are invariants. A worker cannot report itself successful without independent source-side verification. Never weaken a gate, bypass approvals, use production credentials in workers, or move a release step into this dashboard. The current preview deliberately cannot execute jobs; complete the provider investigation and result-verification design before enabling that boundary.
+The source project's checks and release permissions are invariants. A worker cannot report itself successful without independent provider and immutable-audit verification. Never weaken a gate, bypass approvals, use production credentials in workers, or move a release step into this dashboard. BuildFerry publishes additional checks; replacing an adopter's original checks needs a separately reviewed integration and live validation. Keep worker provisioning restricted to fresh, dedicated private repositories and preserve uncertain-dispatch reservations.
 
 See the [MVP plan](docs/mvp-plan.md) and [implementation status](docs/implementation-status.md) before extending scope. Contributions are under Apache-2.0.

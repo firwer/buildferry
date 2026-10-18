@@ -8,6 +8,7 @@ services:
       - "127.0.0.1:8787:8787"
     environment:
       BUILDFERRY_PUBLIC_URL: ${BUILDFERRY_PUBLIC_URL:-http://localhost:8787}
+      BUILDFERRY_TRUST_PROXY_HOPS: ${BUILDFERRY_TRUST_PROXY_HOPS:-0}
     volumes:
       - buildferry-data:/data
     read_only: true

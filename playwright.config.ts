@@ -25,9 +25,13 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm demo",
+    command: "pnpm test:ui-server",
     url: "http://localhost:8798/readyz",
-    env: { PORT: "8798", BUILDFERRY_PUBLIC_URL: "http://localhost:8798" },
+    env: {
+      NODE_ENV: "test",
+      PORT: "8798",
+      BUILDFERRY_PUBLIC_URL: "http://localhost:8798",
+    },
     reuseExistingServer: false,
     timeout: 30_000,
   },

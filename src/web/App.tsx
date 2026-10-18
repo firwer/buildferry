@@ -25,9 +25,11 @@ import { Accounts } from "./Accounts.js";
 import { Connections, TeamSettings } from "./Connections.js";
 import { Routing, TestPlanner } from "./Routing.js";
 import { Setup } from "./Setup.js";
+import { Workloads, WorkerSetup } from "./Workloads.js";
 
 const pages = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "workloads", label: "Workloads and runs", icon: GitFork },
   { id: "accounts", label: "Team accounts", icon: Users },
   { id: "routing", label: "Routing preview", icon: Network },
   { id: "tests", label: "Test planner", icon: FlaskConical },
@@ -96,12 +98,12 @@ function Overview({
       </div>
       <div className="stats">
         <article>
-          <span>Available for previews</span>
+          <span>Verified allowance remaining</span>
           <strong>
             {number(available)}
             <small> min</small>
           </strong>
-          <p>After reserves and contribution limits</p>
+          <p>Before pending run reservations</p>
         </article>
         <article>
           <span>Team accounts</span>
@@ -145,8 +147,8 @@ function Overview({
             <ShieldCheck size={21} />
           </div>
           <p>
-            This release connects accounts and plans capacity. It cannot run
-            project commands, change checks or deploy your application.
+            BuildFerry publishes its own verified results. Your existing checks,
+            branch rules and release approvals stay in place.
           </p>
         </section>
       </div>
@@ -222,7 +224,7 @@ function DashboardView({ session }: Readonly<{ session: SessionView }>) {
             <CircleHelp size={16} />
             Docs and source
           </a>
-          <span className="version">BuildFerry / 0.1 preview</span>
+          <span className="version">BuildFerry / 0.1</span>
         </div>
       </aside>
       <div className="workspace">
@@ -233,7 +235,7 @@ function DashboardView({ session }: Readonly<{ session: SessionView }>) {
           </span>
           <div>
             <span className="preview-badge">
-              {session.demo ? "Sample demo" : "Connections and previews"}
+              {session.demo ? "Test fixtures" : "Your workspace"}
             </span>
             <span className="user-name">{session.user?.login}</span>
             {!session.demo && (
@@ -249,15 +251,16 @@ function DashboardView({ session }: Readonly<{ session: SessionView }>) {
           </div>
         </header>
         <main className="main-content">
-          <div className="mode-notice">
-            {session.demo
-              ? "Sample data. No accounts are connected and no jobs will run."
-              : "Preview release. Connections are live; workload execution is not enabled."}
-          </div>
+          {session.demo && (
+            <div className="mode-notice">
+              Test fixtures. No accounts are connected and no jobs will run.
+            </div>
+          )}
           <Failure error={query.error ?? logout.error} />
           {query.isPending && <Busy>Loading your workspace</Busy>}
           {query.data && (
             <>
+              {page === "workloads" && <Workloads session={session} />}
               {page === "overview" && (
                 <Overview
                   data={query.data}
@@ -276,6 +279,7 @@ function DashboardView({ session }: Readonly<{ session: SessionView }>) {
                     </p>
                   </div>
                   <Accounts data={query.data} session={session} />
+                  <WorkerSetup data={query.data} session={session} />
                   <TeamSettings session={session} />
                 </>
               )}

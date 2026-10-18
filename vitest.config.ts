@@ -9,6 +9,7 @@ export default defineConfig({
       include: [
         "src/server/**/*.ts",
         "src/shared/**/*.ts",
+        "src/worker/**/*.ts",
         "src/web/**/*.{ts,tsx}",
       ],
       exclude: [

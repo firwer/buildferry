@@ -11,11 +11,12 @@ test("keeps the standalone demo readable and free of browser errors", async ({
   ).toBeVisible();
   await expect(
     page.getByText(
-      "Sample data. No accounts are connected and no jobs will run.",
+      "Test fixtures. No accounts are connected and no jobs will run.",
     ),
   ).toBeVisible();
   await expect(page.locator(".account-card")).toHaveCount(3);
   for (const name of [
+    "Workloads and runs",
     "Team accounts",
     "Routing preview",
     "Test planner",

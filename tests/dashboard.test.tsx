@@ -16,6 +16,7 @@ import { currentPeriod } from "../src/server/routing.js";
 import { api, loadSession } from "../src/web/api.js";
 import { fixture, projectId, response, sampleApp } from "./fixtures.js";
 import { z } from "zod";
+import { project, worker, sourceSha } from "./execution-fixtures.js";
 
 const apps: Awaited<ReturnType<typeof fixture>>[] = [];
 const clients: QueryClient[] = [];
@@ -74,10 +75,144 @@ async function mount(signedIn = true, fetcher?: typeof fetch) {
       <App />
     </QueryClientProvider>,
   );
-  return { ...app, user: userEvent.setup() };
+  return { ...app, client, user: userEvent.setup() };
 }
 
 describe("dashboard journeys", () => {
+  it("shows real empty states and connects an approved workload without seeded runs", async () => {
+    const { user, execution, store } = await mount();
+    vi.spyOn(execution.service.credentials, "token").mockResolvedValue(
+      "owner-user-token",
+    );
+    vi.spyOn(execution.service.github, "installation").mockResolvedValue({
+      id: 201,
+      app_id: 10,
+    });
+    vi.spyOn(execution.service.github, "repository").mockResolvedValue({
+      id: 101,
+      full_name: "owner/source",
+      private: true,
+      archived: false,
+      disabled: false,
+      default_branch: "main",
+      owner: { id: 1, login: "owner" },
+    });
+    await user.click(
+      await screen.findByRole("button", { name: "Workloads and runs" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "No runs yet" }),
+    ).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Connect workload" }));
+    await user.type(screen.getByLabelText("Source repository"), "owner/source");
+    await user.type(screen.getByLabelText("Workload name"), "Build");
+    await user.type(
+      screen.getByLabelText(/Approved commands, one per line/),
+      "npm ci\nnpm test",
+    );
+    await user.clear(screen.getByLabelText("Maximum minutes"));
+    await user.type(screen.getByLabelText("Maximum minutes"), "10");
+    await user.click(screen.getByLabelText("Run on default branch updates"));
+    await user.click(screen.getByRole("button", { name: "Save workload" }));
+    expect(
+      await screen.findByRole("button", { name: "Run Build" }),
+    ).toBeTruthy();
+    expect(
+      store.db
+        .prepare("SELECT COUNT(*) AS n FROM records WHERE kind='job'")
+        .get()?.n,
+    ).toBe(0);
+    expect(execution.service.projects()[0]).toMatchObject({
+      repositoryId: 101,
+      recipe: { commands: ["npm ci", "npm test"] },
+      onPush: true,
+    });
+  });
+
+  it("queues a pinned benchmark, preserves the prior recipe on edits and cancels safely", async () => {
+    const providerFetch = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => response({ id: 501 }));
+    const { user, execution, store } = await mount(true, providerFetch);
+    store.put("project", project.id, project);
+    vi.spyOn(execution.service.github, "token").mockResolvedValue(
+      "installation-token",
+    );
+    vi.spyOn(execution.service.github, "ref").mockResolvedValue(sourceSha);
+    await user.click(
+      await screen.findByRole("button", { name: "Workloads and runs" }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Run Build" }));
+    await user.type(
+      screen.getByLabelText("Commit revision (optional)"),
+      sourceSha,
+    );
+    await user.selectOptions(screen.getByLabelText("Capacity"), "ubicloud");
+    await user.click(screen.getByRole("button", { name: "Queue run" }));
+    expect(
+      await screen.findByRole("button", { name: "Cancel run" }),
+    ).toBeTruthy();
+    expect(execution.service.jobs()[0]).toMatchObject({
+      sourceSha,
+      route: "ubicloud",
+      state: "queued",
+    });
+    await user.click(screen.getByRole("button", { name: "Edit Build" }));
+    await user.clear(screen.getByLabelText(/Approved commands, one per line/));
+    await user.type(
+      screen.getByLabelText(/Approved commands, one per line/),
+      "npm run build",
+    );
+    await user.click(screen.getByRole("button", { name: "Save workload" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(execution.service.jobs()[0]?.recipe.commands).toEqual([
+      "npm ci",
+      "npm test",
+    ]);
+    await user.click(screen.getByRole("button", { name: "Cancel run" }));
+    expect(await screen.findByText("cancelled")).toBeTruthy();
+    expect(execution.service.jobs()[0]).toMatchObject({
+      state: "cancelled",
+      cancellationConfirmed: true,
+    });
+  });
+
+  it("manages the owner's explicit worker approvals", async () => {
+    const { user, store, client, execution } = await mount();
+    store.put("project", project.id, project);
+    const account = store.get("account", "1", accountSchema);
+    if (!account) throw new Error("Missing fixture account");
+    store.put("account", "1", {
+      ...account,
+      settings: { ...account.settings, workerRepository: "buildferry-ci" },
+    });
+    await client.invalidateQueries({ queryKey: ["dashboard"] });
+    const provision = vi
+      .spyOn(execution.service, "provisionWorker")
+      .mockImplementation(async (_id, allowedProjects) => {
+        const changed = { ...worker, allowedProjects: [...allowedProjects] };
+        store.put("worker", "1", changed);
+        return changed;
+      });
+    await user.click(
+      await screen.findByRole("button", { name: "Team accounts" }),
+    );
+    await user.click(await screen.findByLabelText("owner/source / Build"));
+    await user.click(
+      screen.getByRole("button", {
+        name: "Install worker and approve projects",
+      }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Save project approvals" }),
+    ).toBeTruthy();
+    expect(provision).toHaveBeenCalledWith(1, [project.id]);
+    await user.click(screen.getByLabelText("owner/source / Build"));
+    await user.click(
+      screen.getByRole("button", { name: "Save project approvals" }),
+    );
+    await waitFor(() => expect(provision).toHaveBeenLastCalledWith(1, []));
+  });
   it("navigates the workspace, previews waiting jobs, and retains every planned suite", async () => {
     const { user } = await mount();
     await screen.findByRole("heading", { name: /Your team's capacity/ });
@@ -233,8 +368,8 @@ describe("dashboard journeys", () => {
     await user.clear(screen.getByLabelText("Priority level"));
     await user.type(screen.getByLabelText("Priority level"), "3");
     await user.type(screen.getByLabelText(/Actual rate per minute/), "0.008");
-    await user.clear(screen.getByLabelText("Preview budget ($)"));
-    await user.type(screen.getByLabelText("Preview budget ($)"), "5");
+    await user.clear(screen.getByLabelText("Monthly spend limit ($)"));
+    await user.type(screen.getByLabelText("Monthly spend limit ($)"), "5");
     await user.click(
       screen.getByRole("button", { name: "Verify and save connection" }),
     );

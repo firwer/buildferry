@@ -5,7 +5,7 @@ const config = loadConfig();
 const { server, claimCode } = await createApp(config);
 await server.listen({ port: config.port, host: config.host });
 console.log(
-  `BuildFerry is available at ${config.publicUrl}. Workload execution is disabled.`,
+  `BuildFerry is available at ${config.publicUrl}. ${config.demo ? "Test fixtures only." : "Approved workloads will run on connected workers."}`,
 );
 if (claimCode) console.log(`One-use setup code: ${claimCode}`);
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

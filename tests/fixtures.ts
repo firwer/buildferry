@@ -6,6 +6,7 @@ import { createApp } from "../src/server/app.js";
 import { newAccount } from "../src/server/auth.js";
 import type { GitHubApp } from "../src/server/providers/github.js";
 import type { Config } from "../src/server/config.js";
+import type { VerifyWorkerIdentity } from "../src/server/worker-identity.js";
 
 export const sampleApp: GitHubApp = {
   id: 10,
@@ -30,13 +31,23 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     port: 8787,
     host: "127.0.0.1",
     demo: false,
+    trustProxyHops: 0,
     ...overrides,
   };
 }
 export async function fixture(
-  options: { demo?: boolean; signedIn?: boolean; fetcher?: typeof fetch } = {},
+  options: {
+    demo?: boolean;
+    signedIn?: boolean;
+    fetcher?: typeof fetch;
+    proxyHops?: number;
+    verifyWorkerIdentity?: VerifyWorkerIdentity;
+  } = {},
 ) {
-  const config = testConfig({ demo: options.demo ?? false });
+  const config = testConfig({
+    demo: options.demo ?? false,
+    trustProxyHops: options.proxyHops ?? 0,
+  });
   const store = new Store(":memory:", config.key);
   const fetcher =
     options.fetcher ??
@@ -47,6 +58,8 @@ export async function fixture(
     store,
     fetcher,
     claimCode: "fixture-claim-code",
+    startController: false,
+    verifyWorkerIdentity: options.verifyWorkerIdentity,
   });
   if (options.signedIn) {
     store.put("config", "owner", 1);

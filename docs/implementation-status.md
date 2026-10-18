@@ -1,32 +1,39 @@
 # Implementation status
 
-This first pull request implements connections and previews from the [MVP plan](mvp-plan.md). The full MVP is still in progress. No source project is migrated, and no existing workflow, branch rule, required check, environment approval, database release, or deployment is changed.
+BuildFerry now implements the actual execution path. Deployment and a real two-owner pilot remain unverified; this document does not claim they have happened. No existing Wisbid workflow, worker repository, branch rule, required check, environment approval, database release or deployment has been changed.
 
-| Area | Implemented | Still required before live execution |
+| Area | Implemented | Validation or work still required |
 | --- | --- | --- |
-| Self hosting | Single container, React dashboard, SQLite, automatic key creation, claim code, health checks, backup command | Real HTTPS onboarding and restore exercise on the chosen host |
-| GitHub | Manifest registration, invited sign-in with PKCE, encrypted credentials, refresh, personal usage and private repository probes | Live two-owner probes, worker provisioning, short-lived installation tokens, source access, provider policy clarification |
-| Accounts | Owner-managed allowance, contribution, reserve, state, priority, weight, parallel slots | Contribution spending ledger, transactional reservations, settling delayed billing, allowed projects, active-run draining |
-| Ubicloud | Verify project and GitHub installations; one selected runner profile per project; entered rate and preview budget | Repository runner-access probe, actual dispatch, period spending ledger, invoice reconciliation |
-| Routing | Stateless capacity preview, strict tiers, weighted remaining capacity, runtime/memory/budget/slot constraints | Durable queue, urgency, deadlines, reservations, dispatch correlation, leases, reconciliation, cancellation |
-| Performance | Deterministic grouping from supplied independent-suite timings; every suite retained once | Real duration collection, worker sharding, coverage merge, artifact reuse, matched cold/warm runner benchmarks |
-| Required checks | Existing project CI remains untouched; no check-write or dispatch permissions requested | Trusted source integration and independent verification retaining the original check producer and every release gate |
+| Self hosting | One container and persistent volume; automatic encryption key; one-use claim; HTTPS setup; backup and restore tooling | Deploy separately on the selected Coolify server and exercise real HTTPS onboarding and recovery |
+| GitHub | Manifest App setup, invited PKCE sign-in, token rotation, owner-wide usage, scoped installation tokens | Live owner and cofounder authorization with the execution permission set |
+| Workers | Explicit per-owner project approvals; fresh private repository guard; atomic launcher commit and pinned tag; signed, single-use worker claim; checkout credential revoked before commands | Install on fresh, consenting worker repositories; prove live OIDC claim shape and revocation |
+| Routing | Durable priority queue, fair reconciliation, transactional runtime reservations, owner caps/reserves/slots, pause/drain, UTC period accounting, bounded paid fallback | Billing settlement currently remains conservative and can double-count completed local usage already present in the owner-wide report |
+| Ubicloud | Project and installation checks; exact worker-repository preflight; monthly and per-job spend reservations; configured rate | Real worker dispatch and matched benchmark against native GitHub; invoice reconciliation is not implemented |
+| Results | Independent run, actor, attempt, revision, step and immutable pre-command audit checks; additional GitHub check; restart-safe finalization; cancellation race handling | Live success, failure, cancellation and uncertain-response pilot evidence |
+| Dashboard | Real workload setup, worker consent, queue/run/cancel controls, worker logs, measured queue/command time and rounded usage | Live provider usability exercise; logs require the viewer's normal GitHub repository access |
+| Existing checks | Original workflows, required checks, approvals and release jobs untouched | Trusted source bridge, original check-producer parity, automatic test sharding and merged coverage before replacing any original check |
 
-## Limits of the preview
+## Scope and limits
 
-Preview budgets and contribution caps are estimates for each preview. They are not a live spending ledger or an enforceable monthly budget. Two previews do not reserve capacity from each other. Paused and draining accounts both stop receiving preview assignments because there are no active jobs yet.
+Normal startup has no example accounts, fabricated runs or sample timings. Synthetic accounts and credentials exist only in automated test fixtures. The separate fixture server requires the test environment and loopback; it cannot dispatch or modify provider connections.
 
-Usage must have been verified within 15 minutes for the current UTC month. This adapter counts owner-wide standard Linux Actions minute records. Unsupported minute SKUs fail closed, including other operating systems and larger runners. Storage is not counted as minutes. The included allowance is owner-confirmed because this endpoint does not provide a complete remaining-allowance contract. Usage can lag and other workflows can spend concurrently. Retain provider-side spending controls.
+The source owner defines approved command recipes. Each named workload is independent, with no implicit dependency graph. Several workloads on the same source repository can run concurrently across separately consenting owners. Manual runs pin an exact commit; optional signed default-branch pushes enqueue the configured workloads idempotently. Pull-request automation is not enabled.
 
-All invited members can see the team's connected account usage and configuration. Invite only teammates permitted to see those totals. Only an account owner can increase or change their contribution. The instance owner manages invitations and provider connections. This release has no viewer or project-level access roles.
+The controller records intent before external mutations. A lost dispatch response is reconciled; it is never blindly retried or routed elsewhere. Unknown acceptance keeps its capacity reserved. A failed application command stays failed. Cancellation and publication have durable states so cancellation cannot race into a false success. Provider identity mismatches fail closed and retain uncertain capacity for investigation.
 
-The app requests read-only Actions, Contents, Metadata, and Plan permissions. Those permissions support observation; they cannot provision a worker workflow or dispatch a run. The next execution milestone must explicitly review the larger permission set. Ubicloud project access does not prove per-repository runner eligibility.
+The worker launcher, source revision and recipe are snapshotted per run. Its one-use GitHub identity must match the immutable repository IDs, approved worker revision, tag, accepted run ID and first attempt. The server revokes a fresh source-only read token before project commands run. The audit is uploaded as an immutable artifact before project code and is verified independently alongside GitHub's job and step results. Callback responses and project output cannot report success.
 
-The test coverage report includes the service, shared contracts, and dashboard components and API client. Process entrypoints and the backup CLI are smoke-tested separately. Browser tests cover desktop and mobile layouts, routing previews and test grouping. Sample timings show a planning estimate, not a measured performance improvement.
+Account usage must be current for the UTC month and verified within 15 minutes. Queued work refreshes eligible connections roughly every five minutes, with retry backoff. Unsupported minute SKUs fail closed. The owner confirms their included allowance; this API does not provide a complete remaining-allowance contract. Other workflows can spend concurrently. Retain GitHub spending controls and a reserve. Local completed usage remains counted conservatively until billing settlement is proved, which can reduce usable capacity temporarily.
 
-## Next implementation sequence
+All invited members can view team account usage and workload configuration. Only the account owner can change their contribution or worker approvals. The instance owner controls workload commands, invitations and paid providers. There are no viewer roles or project-level dashboard isolation yet; invite trusted teammates only.
 
-1. Complete live provider investigation with consenting owners, without changing adopter CI. Record supported usage responses, billing lag, account permissions, worker source access, OIDC identities, cancellation and Ubicloud access.
-2. Implement the reservation ledger and durable execution lifecycle with duplicate, restart, cancellation and uncertain-dispatch tests. Keep source credentials out of project code.
-3. Add the stable source integration and trusted result verifier. Reject stale revisions, unexpected workers, altered audits, missing suites, or incomplete coverage. Keep release jobs in the original repository and its protected environments.
-4. Benchmark identical workloads on standard GitHub and compatible Ubicloud workers, then roll out a reviewed opt-in pilot. Enable sharding only with complete-suite and merged-coverage evidence.
+App permissions are Plan and Metadata read, plus Actions, Contents, Workflows and Checks write. Tokens issued for checkout are narrowed to one source repository and Contents read only; worker dispatch tokens are narrowed to one worker repository. No administration, branch bypass, deployments or production secrets are requested.
+
+## Acceptance still pending
+
+1. Restore the desktop browser/Coolify connection, inspect actual existing server load, and deploy a new independent app at the chosen HTTPS origin.
+2. Complete real App registration, owner and cofounder consent, billing verification and fresh worker installation without changing an existing CI worker.
+3. Run real success, failure and cancellation cases on both owners, plus a budgeted Ubicloud run. Verify results, billing ownership and restart recovery.
+4. Compare repeated identical workloads before making speed or cost claims. Retain original source checks until a reviewed bridge proves complete test and coverage parity.
+
+The [MVP plan](mvp-plan.md) remains the broader acceptance contract. Implemented execution is not evidence that live acceptance, automatic shard/coverage aggregation, original check migration or a measured speed improvement has passed.

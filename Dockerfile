@@ -10,7 +10,7 @@ RUN pnpm build && pnpm prune --prod
 FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=8787 BUILDFERRY_DATA_DIR=/data
 WORKDIR /app
-RUN mkdir /data && chmod 700 /data && chown node:node /data /app
+RUN mkdir /data && chmod 700 /data && chown node:node /data
 COPY --from=build --chmod=0444 /app/package.json ./
 COPY --from=build --chmod=0555 /app/node_modules ./node_modules
 COPY --from=build --chmod=0555 /app/dist ./dist

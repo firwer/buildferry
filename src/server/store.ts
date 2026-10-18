@@ -97,6 +97,18 @@ export class Store {
       .all(kind)
       .map((row) => schema.parse(JSON.parse(z.string().parse(row.body))));
   }
+  entries<S extends z.ZodType>(
+    kind: string,
+    schema: S,
+  ): { id: string; value: z.infer<S> }[] {
+    return this.db
+      .prepare("SELECT id, body FROM records WHERE kind = ? ORDER BY id")
+      .all(kind)
+      .map((row) => ({
+        id: z.string().parse(row.id),
+        value: schema.parse(JSON.parse(z.string().parse(row.body))),
+      }));
+  }
   put(kind: string, id: string, value: object | string | number): void {
     this.db
       .prepare(

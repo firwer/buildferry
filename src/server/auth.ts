@@ -89,12 +89,14 @@ function createManifest(context: Context, name: string) {
     setup_url: `${base}/`,
     hook_attributes: { url: `${base}/api/github/webhook`, active: true },
     default_permissions: {
-      actions: "read",
-      contents: "read",
+      actions: "write",
+      contents: "write",
+      checks: "write",
+      workflows: "write",
       metadata: "read",
       plan: "read",
     },
-    default_events: ["installation", "installation_repositories"],
+    default_events: ["installation", "installation_repositories", "push"],
     request_oauth_on_install: false,
   };
 }
@@ -358,14 +360,32 @@ export async function registerWebhook(
         throw new HttpError(403, "The webhook signature is invalid.");
       }
       const previous = context.store.get("delivery", delivery.data, z.number());
-      if (previous === null) {
-        context.store.put("delivery", delivery.data, Date.now());
-        context.store.db
-          .prepare(
-            "DELETE FROM records WHERE kind='delivery' AND CAST(body AS INTEGER) < ?",
-          )
-          .run(Date.now() - 7 * 86_400_000);
-      }
+      context.store.transaction(() => {
+        if (previous === null) {
+          context.store.put("delivery", delivery.data, Date.now());
+          if (request.headers["x-github-event"] === "push") {
+            const push = z
+              .object({
+                ref: z.string(),
+                after: z.string().regex(/^[a-f0-9]{40}$/),
+                deleted: z.boolean(),
+                repository: z.object({ id: z.number() }),
+                installation: z.object({ id: z.number() }),
+              })
+              .safeParse(JSON.parse(body.toString("utf8")));
+            if (push.success && !push.data.deleted)
+              context.store.put("push", delivery.data, {
+                ...push.data,
+                receivedAt: Date.now(),
+              });
+          }
+          context.store.db
+            .prepare(
+              "DELETE FROM records WHERE kind='delivery' AND CAST(body AS INTEGER) < ?",
+            )
+            .run(Date.now() - 7 * 86_400_000);
+        }
+      });
       return reply
         .code(202)
         .send({ received: true, duplicate: previous !== null });
@@ -375,8 +395,15 @@ export async function registerWebhook(
 
 /** Single-flight refresh prevents two requests from rotating the same token concurrently. */
 export class Credentials {
-  private readonly flights = new Map<number, Promise<string>>();
-  constructor(private readonly context: Context) {}
+  private static readonly stores = new WeakMap<
+    Context["store"],
+    Map<number, Promise<string>>
+  >();
+  private readonly flights: Map<number, Promise<string>>;
+  constructor(private readonly context: Context) {
+    this.flights = Credentials.stores.get(context.store) ?? new Map();
+    Credentials.stores.set(context.store, this.flights);
+  }
   token(id: number): Promise<string> {
     const existing = this.flights.get(id);
     if (existing) return existing;

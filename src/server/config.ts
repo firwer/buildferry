@@ -10,6 +10,7 @@ export type Config = Readonly<{
   host: string;
   key: Buffer;
   demo: boolean;
+  trustProxyHops: number;
 }>;
 
 /** Persist one key and refuse to replace a missing key for an existing database. */
@@ -36,8 +37,10 @@ function persistentKey(dataDir: string): Buffer {
 /** Require HTTPS off loopback; a proxy cannot override the configured trusted origin. */
 export function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
-  demo = process.argv.includes("--demo"),
+  demo = process.argv.includes("--test-fixtures"),
 ): Config {
+  if (process.argv.includes("--test-fixtures") && env.NODE_ENV !== "test")
+    throw new Error("Fixture data is available only in the test environment.");
   const publicUrl = new URL(
     env.BUILDFERRY_PUBLIC_URL ?? "http://localhost:8787",
   );
@@ -76,6 +79,12 @@ export function loadConfig(
     dataDir,
     key,
     demo,
+    trustProxyHops: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(5)
+      .parse(env.BUILDFERRY_TRUST_PROXY_HOPS ?? 0),
     port: z.coerce
       .number()
       .int()

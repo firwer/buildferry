@@ -20,7 +20,7 @@ export async function api<S extends z.ZodType>(
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (response.status === 204) return schema.parse(null);
-  const data: unknown = await response.json();
+  const data: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     const error =
       data &&
@@ -31,7 +31,12 @@ export async function api<S extends z.ZodType>(
         : "The request could not be completed.";
     throw new Error(error);
   }
-  return schema.parse(data);
+  const parsed = schema.safeParse(data);
+  if (!parsed.success)
+    throw new Error(
+      "Your workspace returned an unexpected response. Refresh and try again.",
+    );
+  return parsed.data;
 }
 
 export async function loadSession() {

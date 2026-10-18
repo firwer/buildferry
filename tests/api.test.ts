@@ -21,12 +21,80 @@ afterEach(async () => {
 });
 
 describe("dashboard authentication", () => {
+  it("applies origin, CSRF and demo restrictions to encoded API paths", async () => {
+    const { server, headers, cookies } = await make({ signedIn: true });
+    const request = {
+      method: "POST" as const,
+      url: "/%61pi/invitations",
+      cookies,
+      payload: {},
+    };
+    expect(
+      (await server.inject({ ...request, headers: { origin: headers.origin } }))
+        .statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await server.inject({
+          ...request,
+          headers: { ...headers, origin: "https://other.example" },
+        })
+      ).statusCode,
+    ).toBe(403);
+    const demo = await make({ demo: true });
+    expect(
+      (
+        await demo.server.inject({
+          method: "POST",
+          url: "/%61pi/providers",
+          headers: {
+            origin: demo.config.publicUrl,
+            "x-buildferry-csrf": "demo-preview",
+          },
+          payload: {},
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(demo.fetcher).not.toHaveBeenCalled();
+  });
+  it.each([0, 1])(
+    "trusts forwarded client addresses only with %s configured proxy hops",
+    async (proxyHops) => {
+      const { server } = await make({ proxyHops });
+      for (let request = 0; request < 120; request++) {
+        expect(
+          (
+            await server.inject({
+              url: "/api/session",
+              headers: { "x-forwarded-for": "198.51.100.1" },
+            })
+          ).statusCode,
+        ).toBe(200);
+      }
+      expect(
+        (
+          await server.inject({
+            url: "/api/session",
+            headers: { "x-forwarded-for": "198.51.100.1" },
+          })
+        ).statusCode,
+      ).toBe(429);
+      expect(
+        (
+          await server.inject({
+            url: "/api/session",
+            headers: { "x-forwarded-for": "198.51.100.2" },
+          })
+        ).statusCode,
+      ).toBe(proxyHops ? 200 : 429);
+    },
+  );
   it("exposes health and minimal setup state without private configuration", async () => {
     const { server } = await make();
     expect((await server.inject("/healthz")).json()).toEqual({ status: "ok" });
     expect((await server.inject("/readyz")).json()).toEqual({
       status: "ready",
-      execution: "disabled",
+      execution: "enabled",
     });
     const session = await server.inject("/api/session");
     expect(sessionSchema.parse(session.json()).stage).toBe("claim");
@@ -392,6 +460,29 @@ describe("account contributions", () => {
 });
 
 describe("provider management and test planning", () => {
+  it("keeps synthetic demo previews usable after the real usage freshness window", async () => {
+    const { server, headers } = await make({ demo: true });
+    const clock = vi
+      .spyOn(Date, "now")
+      .mockReturnValue(Date.now() + 16 * 60_000);
+    try {
+      const dashboard = dashboardSchema.parse(
+        (await server.inject("/api/dashboard")).json(),
+      );
+      expect(
+        dashboard.candidates.filter((candidate) => candidate.reason === null),
+      ).toHaveLength(4);
+      const preview = await server.inject({
+        method: "POST",
+        url: "/api/routing/preview",
+        headers: { ...headers, "x-buildferry-csrf": "demo-preview" },
+        payload: { jobs: 1, maxMinutes: 5, memoryGiB: 8, maxCostMicros: 0 },
+      });
+      expect(preview.json().assignments[0].name).toBe("avery");
+    } finally {
+      clock.mockRestore();
+    }
+  });
   it("stores a verified Ubicloud token encrypted and never returns it", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
@@ -504,7 +595,7 @@ describe("provider management and test planning", () => {
       ).statusCode,
     ).toBe(400);
   });
-  it("does not expose project execution or check mutation endpoints", async () => {
+  it("does not expose a raw arbitrary dispatch endpoint", async () => {
     const { server, cookies, headers } = await make({ signedIn: true });
     expect(
       (

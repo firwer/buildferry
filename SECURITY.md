@@ -1,6 +1,6 @@
 # Security
 
-This project is an early preview. Real execution is disabled. Never give a dashboard worker or project checkout access to provider management credentials, billing tokens, app private keys, or production secrets.
+This project is an execution release candidate awaiting a live two-owner pilot. Commands run only on explicitly approved private workers. Never give project code provider management credentials, billing tokens, App private keys or production secrets. Source checkout tokens are read-only and revoked before commands run; results require independent provider and immutable-audit verification.
 
 Please use the repository's **Security / Advisories / Report a vulnerability** feature for sensitive reports if available. If private reporting is unavailable, open an issue requesting a private reporting channel without including exploit details or credentials. No dedicated security email or response-time guarantee is currently published.
 

@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { GitHub } from "../src/server/providers/github.js";
 import { providerJson } from "../src/server/providers/http.js";
-import { verifyUbicloud } from "../src/server/providers/ubicloud.js";
+import {
+  verifyUbicloud,
+  verifyUbicloudWorker,
+} from "../src/server/providers/ubicloud.js";
 import { z } from "zod";
 import { projectId, response, sampleApp } from "./fixtures.js";
 
@@ -161,6 +164,46 @@ describe("GitHub usage and repository eligibility", () => {
 });
 
 describe("Ubicloud connection verification", () => {
+  it("verifies the exact worker repository before paid dispatch", async () => {
+    const provider = {
+      projectId,
+      name: "Cloud",
+      installations: [{ id: "install-1", name: "owner" }],
+      runner: "ubicloud-standard-4" as const,
+      priority: 2,
+      rateMicros: 1000,
+      budgetMicros: 50000,
+      verifiedAt: Date.now(),
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      response({
+        id: "repo-1",
+        installation_name: "owner",
+        name: "buildferry-ci",
+      }),
+    );
+    await verifyUbicloudWorker(
+      provider,
+      "owner/buildferry-ci",
+      "ubicloud-secret",
+      fetcher,
+    );
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain(
+      "/github/install-1/repository/buildferry-ci",
+    );
+    expect(
+      new Headers(fetcher.mock.calls[0]?.[1]?.headers).get("authorization"),
+    ).toBe("Bearer ubicloud-secret");
+    await expect(
+      verifyUbicloudWorker(provider, "other/ci", "secret", fetcher),
+    ).rejects.toThrow("worker's owner");
+    fetcher.mockResolvedValueOnce(
+      response({ id: "repo-1", installation_name: "owner", name: "other-ci" }),
+    );
+    await expect(
+      verifyUbicloudWorker(provider, "owner/buildferry-ci", "secret", fetcher),
+    ).rejects.toThrow("different worker");
+  });
   it("checks project identity and all GitHub connections without provisioning compute", async () => {
     const fetcher = vi
       .fn<typeof fetch>()

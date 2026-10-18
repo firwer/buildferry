@@ -34,7 +34,7 @@ function accountFrom(request: FastifyRequest, context: Context): Account {
   return account;
 }
 
-async function refreshAccount(
+export async function refreshAccount(
   account: Account,
   context: Context,
   credentials: Credentials,
@@ -64,8 +64,8 @@ async function refreshAccount(
       updated.repositoryVerified = true;
     }
     updated.message = updated.repositoryVerified
-      ? "Usage and private repository verified. Execution is not enabled."
-      : "Usage verified. Select a private CI repository to preview this account.";
+      ? "Usage and private repository verified."
+      : "Usage verified. Select your private CI repository.";
   } catch (error) {
     updated.verifiedAt = null;
     updated.usedMinutes = null;
@@ -95,17 +95,34 @@ async function refreshAccount(
   return merged;
 }
 
+/** Keep synthetic previews usable without relaxing freshness checks for real credentials. */
+function capacitySnapshot(context: Context) {
+  const now = Date.now();
+  const period = currentPeriod(now);
+  const accounts = context.store
+    .list("account", accountSchema)
+    .map((account) =>
+      context.config.demo ? { ...account, period, verifiedAt: now } : account,
+    );
+  const providers = context.store
+    .list("provider", providerSchema)
+    .map((provider) =>
+      context.config.demo ? { ...provider, verifiedAt: now } : provider,
+    );
+  return {
+    accounts,
+    providers,
+    period,
+    candidates: candidatesFor(accounts, providers, now),
+  };
+}
+
 export function registerApi(server: FastifyInstance, context: Context): void {
   const credentials = new Credentials(context);
   server.get("/api/dashboard", async (request) => {
     requireIdentity(request, context);
-    const accounts = context.store.list("account", accountSchema);
-    const providers = context.store.list("provider", providerSchema);
     return {
-      accounts,
-      providers,
-      candidates: candidatesFor(accounts, providers),
-      period: currentPeriod(),
+      ...capacitySnapshot(context),
       activity: context.store.activity(),
     };
   });
@@ -175,7 +192,7 @@ export function registerApi(server: FastifyInstance, context: Context): void {
       context.store.setSecret(`ubicloud:${input.projectId}`, { token });
       context.store.put("provider", input.projectId, provider);
       context.store.audit(
-        `Ubicloud project ${verified.name} was connected for routing previews.`,
+        `Ubicloud project ${verified.name} was connected with a monthly spend limit.`,
       );
     });
     return provider;
@@ -218,13 +235,7 @@ export function registerApi(server: FastifyInstance, context: Context): void {
   server.post("/api/routing/preview", async (request) => {
     requireIdentity(request, context);
     const input = previewInputSchema.parse(request.body);
-    return previewRouting(
-      candidatesFor(
-        context.store.list("account", accountSchema),
-        context.store.list("provider", providerSchema),
-      ),
-      input,
-    );
+    return previewRouting(capacitySnapshot(context).candidates, input);
   });
   server.post("/api/tests/plan", async (request) => {
     requireIdentity(request, context);

@@ -101,7 +101,7 @@ function ProviderForm({ onClose }: Readonly<{ onClose: () => void }>) {
           <small>Use the rate for your standard or premium tier.</small>
         </label>
         <label>
-          <span>Preview budget ($)</span>
+          <span>Monthly spend limit ($)</span>
           <input
             type="number"
             required
@@ -159,7 +159,8 @@ export function Connections({
       </div>
       {data.providers.length === 0 ? (
         <Empty title="Add your fallback provider">
-          Connect Ubicloud to compare larger runners and estimate paid overflow.
+          Connect Ubicloud for larger runners and paid overflow within your
+          limits.
         </Empty>
       ) : (
         <div className="provider-list">
@@ -178,7 +179,7 @@ export function Connections({
               </div>
               <div className="provider-budget">
                 <strong>{money(provider.budgetMicros)}</strong>
-                <span>preview budget</span>
+                <span>monthly spend limit</span>
               </div>
               <span className="tier">Priority {provider.priority}</span>
               {canEdit && (
@@ -209,8 +210,8 @@ export function Connections({
       )}
       <Failure error={refresh.error ?? remove.error} />
       <p className="fine-print">
-        Estimates use the rates you enter. Project access does not yet prove
-        that a particular repository can launch a runner.
+        Costs use the rates you enter. Install Ubicloud's GitHub runner app on
+        each approved worker repository before requesting a run.
       </p>
       {adding && <ProviderForm onClose={() => setAdding(false)} />}
     </section>
