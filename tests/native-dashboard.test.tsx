@@ -29,6 +29,7 @@ type FetchState = {
   requests: Array<{ path: string; method: string; body: unknown }>;
   failSave?: boolean;
   nativeError?: boolean;
+  refreshError?: boolean;
 };
 
 const json = (body: unknown, status = 200) =>
@@ -89,6 +90,17 @@ function nativeFetch(state: FetchState) {
       };
       state.dashboard = { ...state.dashboard, workers: [installed] };
       return json(installed);
+    }
+    if (path === "/api/accounts/1/refresh" && method === "POST") {
+      if (state.refreshError)
+        return json({ error: "Usage could not be refreshed." }, 500);
+      return json({
+        ...newAccount(1, "owner", "owner"),
+        usedMinutes: 0,
+        verifiedAt: Date.now(),
+        repositoryVerified: true,
+        message: "Usage and private repository verified.",
+      });
     }
     if (
       path.startsWith("/api/native/runs/") &&
@@ -335,10 +347,11 @@ describe("native repository workflow UI", () => {
       dashboard: nativeDashboardFixture(),
       requests: [],
     };
-    const { user } = mount(
+    const { user, client } = mount(
       <WorkerSetup data={dashboard} session={nativeSession} />,
       state,
     );
+    const invalidate = vi.spyOn(client, "invalidateQueries");
     expect(await screen.findByText("Ready")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Update runner" }));
     await waitFor(() =>
@@ -350,7 +363,44 @@ describe("native repository workflow UI", () => {
         ),
       ).toBe(true),
     );
+    await waitFor(() =>
+      expect(state.requests.map((request) => request.path)).toContain(
+        "/api/accounts/1/refresh",
+      ),
+    );
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["dashboard"] }),
+    );
     expect(screen.queryByText("Projects this worker can run")).toBeNull();
+  });
+
+  it("keeps an installed runner visible and refreshes account status when billing refresh fails", async () => {
+    const state: FetchState = {
+      dashboard: { ...nativeDashboardFixture(), workers: [] },
+      requests: [],
+      refreshError: true,
+    };
+    const dashboard: Dashboard = {
+      accounts: [newAccount(1, "owner", "owner")],
+      providers: [],
+      candidates: [],
+      period: "2026-10",
+      activity: [],
+    };
+    const { user, client } = mount(
+      <WorkerSetup data={dashboard} session={nativeSession} />,
+      state,
+    );
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    await user.click(
+      await screen.findByRole("button", { name: "Install runner" }),
+    );
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Usage could not be refreshed.",
+    );
+    expect(screen.getByText("Ready")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Update runner" })).toBeTruthy();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["dashboard"] });
   });
 
   it("shows genuine empty and inventory error states", async () => {

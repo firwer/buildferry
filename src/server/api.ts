@@ -40,6 +40,7 @@ export async function refreshAccount(
   context: Context,
   credentials: Credentials,
 ): Promise<Account> {
+  let verifiedRepository = account.settings.workerRepository;
   const updated: Account = {
     ...account,
     verifiedAt: null,
@@ -59,11 +60,21 @@ export async function refreshAccount(
     updated.usedMinutes = usage.usedMinutes;
     updated.workerUsedMinutes = usage.workerUsedMinutes;
     updated.verifiedAt = Date.now();
-    if (account.settings.workerRepository) {
+    // Worker creation can finish while billing is loading. Verify the current selection.
+    const latest = context.store.get(
+      "account",
+      String(account.id),
+      accountSchema,
+    );
+    if (!latest) throw new HttpError(404, "This account is not connected.");
+    verifiedRepository = latest.settings.workerRepository;
+    if (verifiedRepository !== account.settings.workerRepository)
+      updated.workerUsedMinutes = null;
+    if (verifiedRepository) {
       await context.github.repository(
         account.login,
         account.id,
-        account.settings.workerRepository,
+        verifiedRepository,
         token,
       );
       updated.repositoryVerified = true;
@@ -90,7 +101,7 @@ export async function refreshAccount(
       "This account was disconnected while verification was running.",
     );
   const repositoryUnchanged =
-    current.settings.workerRepository === account.settings.workerRepository;
+    current.settings.workerRepository === verifiedRepository;
   const merged = {
     ...updated,
     settings: current.settings,

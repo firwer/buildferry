@@ -30,6 +30,30 @@ const candidate = (changes: Partial<Candidate> = {}): Candidate => ({
 const input = { jobs: 1, maxMinutes: 20, memoryGiB: 8, maxCostMicros: 0 };
 
 describe("routing priorities and limits", () => {
+  it("applies provider order before account priority, including paid-first routes", () => {
+    const free = candidate({ id: "free", priority: 20, providerPriority: 1 });
+    const paid = candidate({
+      id: "paid",
+      kind: "ubicloud",
+      priority: 1,
+      providerPriority: 2,
+      rateMicros: 1000,
+      availableMicros: 100_000,
+    });
+    const budget = { ...input, maxCostMicros: 100_000 };
+    expect(
+      previewRouting([paid, free], budget).assignments[0]?.candidateId,
+    ).toBe("free");
+    expect(
+      previewRouting(
+        [
+          { ...free, providerPriority: 2 },
+          { ...paid, providerPriority: 1 },
+        ],
+        budget,
+      ).assignments[0]?.candidateId,
+    ).toBe("paid");
+  });
   it("respects strict priority before available quota or price", () => {
     const result = previewRouting(
       [

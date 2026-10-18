@@ -127,9 +127,13 @@ function exclusion(
   return null;
 }
 
-/** Respect tiers and price, then balance the fraction of each owner's contributed allowance. */
+const routingTier = (candidate: Candidate) =>
+  candidate.providerPriority ?? candidate.priority;
+
+/** Respect provider order, account priority and price before balancing contributed allowance. */
 function compareCandidates(left: Candidate, right: Candidate): number {
   return (
+    routingTier(left) - routingTier(right) ||
     left.priority - right.priority ||
     left.rateMicros - right.rateMicros ||
     (right.availableMinutes * right.weight) /
@@ -175,7 +179,7 @@ export function previewRouting(
     const waiting = available
       .filter(
         (candidate) =>
-          (!chosen || candidate.priority <= chosen.priority) &&
+          (!chosen || routingTier(candidate) <= routingTier(chosen)) &&
           pendingFreeReason(candidate, input, slots.get(candidate.id) ?? 0),
       )
       .sort(compareCandidates)

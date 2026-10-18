@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
+  accountSchema,
   ubicloudMachines,
   type Dashboard,
   type SessionView,
@@ -49,7 +50,7 @@ export function WorkerSetup({
         {},
       );
     },
-    onSuccess: (installed) => {
+    onSuccess: async (installed) => {
       client.setQueryData<NativeDashboard>(nativeQueryKey, (current) =>
         current
           ? {
@@ -63,6 +64,16 @@ export function WorkerSetup({
             }
           : current,
       );
+      try {
+        await api(
+          `/api/accounts/${installed.accountId}/refresh`,
+          accountSchema,
+          "POST",
+          {},
+        );
+      } finally {
+        await client.invalidateQueries({ queryKey: ["dashboard"] });
+      }
     },
   });
   return (

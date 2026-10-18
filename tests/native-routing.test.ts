@@ -213,7 +213,11 @@ describe("native runner admission", () => {
     const app = await make();
     const account = app.store.get("account", "1", accountSchema);
     if (!account) throw new Error("Missing account");
-    app.store.put("account", "1", { ...account, verifiedAt: null });
+    app.store.put("account", "1", {
+      ...account,
+      verifiedAt: null,
+      settings: { ...account.settings, priority: 20 },
+    });
     app.store.put("provider", projectId, {
       projectId,
       name: "Cloud",
@@ -306,6 +310,32 @@ describe("native runner admission", () => {
     const third = { ...lease, id: crypto.randomUUID(), sourceJobId: 703 };
     app.native.service.save(third);
     expect(app.native.service.reserve(third.id)).toBeNull();
+  });
+  it("honours account priority inside the workflow's free GitHub tier", async () => {
+    const app = await make();
+    const owner = accountSchema.parse(
+      app.store.get("account", "1", accountSchema),
+    );
+    app.store.put("account", "1", {
+      ...owner,
+      settings: { ...owner.settings, priority: 2 },
+    });
+    app.store.put("account", "2", {
+      ...owner,
+      id: 2,
+      login: "member",
+      usedMinutes: 100,
+      settings: { ...owner.settings, priority: 1 },
+    });
+    app.store.put("worker", "2", {
+      ...worker,
+      accountId: 2,
+      repository: "member/buildferry-ci",
+      repositoryId: 302,
+      nativeSha: worker.sha,
+    });
+    const lease = await requiredLease(app);
+    expect(app.native.service.reserve(lease.id)?.accountId).toBe(2);
   });
 });
 

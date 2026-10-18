@@ -131,6 +131,7 @@ export const candidateSchema = z.object({
   kind: z.enum(["github", "ubicloud"]),
   runner: z.string(),
   priority,
+  providerPriority: z.number().int().min(1).max(2).optional(),
   weight: z.number().positive(),
   concurrency: z.number().int().min(1),
   availableMinutes: minutes,

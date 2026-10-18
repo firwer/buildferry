@@ -298,7 +298,7 @@ export class NativeService {
         .filter((candidate) => lease.policy.providers.includes(candidate.kind))
         .map((candidate) => ({
           ...nativeMachine(candidate, lease.policy, providers),
-          priority: lease.policy.providers.indexOf(candidate.kind) + 1,
+          providerPriority: lease.policy.providers.indexOf(candidate.kind) + 1,
         }));
       const assignment = previewRouting(allowed, {
         jobs: 1,

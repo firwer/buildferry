@@ -495,6 +495,53 @@ describe("account contributions", () => {
     expect(result.statusCode).toBe(404);
     expect(store.get("account", "2", accountSchema)).toBeNull();
   });
+  it("verifies a worker created while usage refresh is still loading", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const { server, store, cookies, headers } = await make({
+      signedIn: true,
+      fetcher,
+    });
+    store.setSecret("github-user:1", {
+      access_token: "test-token",
+      expires_at: null,
+    });
+    fetcher
+      .mockImplementationOnce(async () => {
+        const current = accountSchema.parse(
+          store.get("account", "1", accountSchema),
+        );
+        store.put("account", "1", {
+          ...current,
+          settings: { ...current.settings, workerRepository: "buildferry-ci" },
+        });
+        return response({ usageItems: [] });
+      })
+      .mockResolvedValueOnce(
+        response({
+          private: true,
+          archived: false,
+          disabled: false,
+          owner: { id: 1 },
+        }),
+      );
+    const result = await server.inject({
+      method: "POST",
+      url: "/api/accounts/1/refresh",
+      cookies,
+      headers,
+      payload: {},
+    });
+    expect(result.statusCode).toBe(200);
+    expect(accountSchema.parse(result.json())).toMatchObject({
+      repositoryVerified: true,
+      workerUsedMinutes: null,
+      message: "Usage and private repository verified.",
+      settings: { workerRepository: "buildferry-ci" },
+    });
+    expect(String(fetcher.mock.calls[1]?.[0])).toContain(
+      "/repos/owner/buildferry-ci",
+    );
+  });
 });
 
 describe("provider management and test planning", () => {
