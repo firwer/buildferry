@@ -1,0 +1,23 @@
+services:
+  buildferry:
+    build: .
+    image: buildferry:local
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      BUILDFERRY_PUBLIC_URL: ${BUILDFERRY_PUBLIC_URL:-http://localhost:8787}
+    volumes:
+      - buildferry-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 20s
+
+volumes:
+  buildferry-data:

@@ -1,0 +1,13 @@
+:root {
+  --canvas: #f8f9f4;
+  --sidebar: #f2f4eb;
+  --ink: #24372e;
+  --muted: #758071;
+  --line: #e2e7db;
+  --forest: #193d37;
+  --green: #59773d;
+  --leaf: #85a15c;
+  --wash: #f0f3e9;
+  --focus: #92aa70;
+  color-scheme: light;
+}

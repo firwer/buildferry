@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.cache/
+.data/
+.env
+.env.*
+!.env.example
+*.log
+*.sqlite*
+*.key
+*.pem
+playwright-report/
+test-results/
