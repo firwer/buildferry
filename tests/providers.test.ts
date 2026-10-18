@@ -215,6 +215,14 @@ describe("Ubicloud connection verification", () => {
     await expect(
       verifyUbicloudWorker(provider, "owner/buildferry-ci", "secret", fetcher),
     ).rejects.toThrow("different worker");
+    fetcher.mockResolvedValueOnce(response({}, 404));
+    await expect(
+      verifyUbicloudWorker(provider, "owner/buildferry-ci", "secret", fetcher),
+    ).resolves.toBeUndefined();
+    fetcher.mockResolvedValueOnce(response({}, 403));
+    await expect(
+      verifyUbicloudWorker(provider, "owner/buildferry-ci", "secret", fetcher),
+    ).rejects.toMatchObject({ status: 403 });
   });
   it("checks project identity and all GitHub connections without provisioning compute", async () => {
     const fetcher = vi

@@ -43,7 +43,7 @@ export async function verifyUbicloud(
   } satisfies Pick<Provider, "name" | "installations">;
 }
 
-/** Verify the specific private worker is visible to the linked Ubicloud installation. */
+/** Verify linked ownership and any existing Ubicloud worker record before dispatch. */
 export async function verifyUbicloudWorker(
   provider: Provider,
   repository: string,
@@ -70,7 +70,13 @@ export async function verifyUbicloudWorker(
     {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
     },
-  );
+  ).catch((error: Error) => {
+    // Ubicloud creates its repository catalogue on the first queued runner job.
+    // A missing catalogue entry is expected for a fresh owner-approved worker.
+    if (error instanceof ProviderError && error.status === 404) return null;
+    throw error;
+  });
+  if (!worker) return;
   if (
     worker.installation_name.toLowerCase() !== owner?.toLowerCase() ||
     worker.name.toLowerCase() !== name.toLowerCase()
