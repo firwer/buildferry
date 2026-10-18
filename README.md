@@ -4,6 +4,8 @@ BuildFerry routes independent builds and tests across a team's GitHub accounts, 
 
 **Status: working live pilot.** Self-hosting, GitHub App registration, two account authorizations, billing reads, private worker installation and Ubicloud dispatch have been exercised on a real deployment. An actual private-source build and full active test command passed independent result verification and published successful additional checks. An earlier test attempt reached its time limit and stayed failed; its resource-aware retry completed the original scope. A second owner's worker and matched provider benchmarks still need live validation. Existing project workflows and release gates stay in place; their migration is a separate reviewed step. See [implementation status](docs/implementation-status.md).
 
+Next: [performance and budget rollout](docs/performance-and-budget-plan.md), covering three or more contributing accounts, free-first queueing, cache reuse, balanced test groups and measured speed-versus-minutes tradeoffs.
+
 ## Run locally
 
 With Node 24 LTS and pnpm 10.26.1:
