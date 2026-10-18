@@ -1,10 +1,10 @@
 # Implementation status
 
-BuildFerry now implements the actual execution path. Deployment and a real two-owner pilot remain unverified; this document does not claim they have happened. No existing Wisbid workflow, worker repository, branch rule, required check, environment approval, database release or deployment has been changed.
+BuildFerry implements the actual execution path and has been deployed as an independent application on an existing Coolify server. The live container passed its health check and served the setup flow over valid HTTPS. Real GitHub authorization and the two-owner pilot remain pending. No existing Wisbid workflow, worker repository, branch rule, required check, environment approval, database release or deployment has been changed.
 
 | Area | Implemented | Validation or work still required |
 | --- | --- | --- |
-| Self hosting | One container and persistent volume; automatic encryption key; one-use claim; HTTPS setup; backup and restore tooling | Deploy separately on the selected Coolify server and exercise real HTTPS onboarding and recovery |
+| Self hosting | One container and persistent volume; automatic encryption key; one-use claim; HTTPS setup; backup and restore tooling; successful independent Coolify deployment and live instance claim | Finish real GitHub onboarding and exercise live backup/recovery |
 | GitHub | Manifest App setup, invited PKCE sign-in, token rotation, owner-wide usage, scoped installation tokens | Live owner and cofounder authorization with the execution permission set |
 | Workers | Explicit per-owner project approvals; fresh private repository guard; atomic launcher commit and pinned tag; signed, single-use worker claim; checkout credential revoked before commands | Install on fresh, consenting worker repositories; prove live OIDC claim shape and revocation |
 | Routing | Durable priority queue, fair reconciliation, transactional runtime reservations, owner caps/reserves/slots, pause/drain, UTC period accounting, bounded paid fallback | Billing settlement currently remains conservative and can double-count completed local usage already present in the owner-wide report |
@@ -31,7 +31,7 @@ App permissions are Plan and Metadata read, plus Actions, Contents, Workflows an
 
 ## Acceptance still pending
 
-1. Restore the desktop browser/Coolify connection, inspect actual existing server load, and deploy a new independent app at the chosen HTTPS origin.
+1. Complete GitHub sign-in and App registration through the deployed instance's real setup flow.
 2. Complete real App registration, owner and cofounder consent, billing verification and fresh worker installation without changing an existing CI worker.
 3. Run real success, failure and cancellation cases on both owners, plus a budgeted Ubicloud run. Verify results, billing ownership and restart recovery.
 4. Compare repeated identical workloads before making speed or cost claims. Retain original source checks until a reviewed bridge proves complete test and coverage parity.
