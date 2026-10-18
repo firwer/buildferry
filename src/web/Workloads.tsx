@@ -458,10 +458,10 @@ export function Workloads({ session }: Readonly<{ session: SessionView }>) {
                 <span>{job.worker?.repository ?? "No worker assigned"}</span>
                 <span>{job.providerId ? "Ubicloud" : "GitHub"}</span>
                 {job.actualMinutes !== null && (
-                  <span>{number(job.actualMinutes)} min billed</span>
+                  <span>Runner time {number(job.actualMinutes)} min</span>
                 )}
                 {job.actualMicros !== null && (
-                  <span>{money(job.actualMicros)}</span>
+                  <span>Estimated {money(job.actualMicros)}</span>
                 )}
                 {job.queueSeconds !== null && (
                   <span>Queue {number(job.queueSeconds)}s</span>

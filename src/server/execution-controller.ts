@@ -226,7 +226,12 @@ export class ExecutionController {
           : workerAccounting(job, run, report).accounting;
       await this.identity.revoke(job.id);
       const current = this.read(job.id) ?? job;
-      const confirmed = { ...current, ...accounting };
+      const confirmed = {
+        ...current,
+        ...accounting,
+        message:
+          "GitHub confirmed this failed worker has stopped. Its result stays failed and its capacity reservation is released.",
+      };
       this.service.save(confirmed);
       this.service.context.store.audit(
         "GitHub confirmed a failed worker has stopped; its result remains failed.",

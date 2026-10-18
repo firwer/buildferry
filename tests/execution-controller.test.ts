@@ -377,6 +377,7 @@ describe("independent provider result verification", () => {
       outcome: "failed",
       cancellationConfirmed: true,
       actualMinutes: 1,
+      message: expect.stringContaining("capacity reservation is released"),
     });
     expect(
       vi
