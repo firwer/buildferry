@@ -45,7 +45,6 @@ jobs:
     permissions:
       contents: read
     env:
-      RUNNER_KIND: ${{ runner.environment }}
       EXPECTED_REPOSITORY: ${{ github.repository }}
       EXPECTED_SHA: ${{ github.sha }}
     steps:
@@ -55,6 +54,8 @@ jobs:
           persist-credentials: false
       - name: Verify native job context
         shell: bash
+        env:
+          RUNNER_KIND: ${{ runner.environment }}
         run: |
           set -euo pipefail
           test "$RUNNER_KIND" = self-hosted
