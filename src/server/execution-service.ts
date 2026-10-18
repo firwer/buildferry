@@ -117,13 +117,6 @@ export class ExecutionService {
     for (const projectId of allowedProjects)
       if (!this.context.store.get("project", projectId, projectSchema))
         throw new HttpError(422, "Select a connected project.");
-    if (
-      this.jobs().some((job) => activeJob(job) && job.accountId === accountId)
-    )
-      throw new HttpError(
-        409,
-        "Wait for this account's running jobs before changing its worker.",
-      );
     const repositoryName = `${account.login}/${account.settings.workerRepository}`;
     const ownerToken = await this.credentials.token(accountId);
     const repository = await this.github.repository(repositoryName, ownerToken);
@@ -145,10 +138,18 @@ export class ExecutionService {
       workerSchema,
     );
     if (previous?.repositoryId === repository.id) {
+      // Active jobs retain their approved worker snapshot; this changes future admission only.
       const updated = { ...previous, allowedProjects: [...allowedProjects] };
       this.context.store.put("worker", String(accountId), updated);
       return updated;
     }
+    if (
+      this.jobs().some((job) => activeJob(job) && job.accountId === accountId)
+    )
+      throw new HttpError(
+        409,
+        "Wait for this account's running jobs before changing its worker.",
+      );
     const runs = await this.github.request(
       "GET",
       `/repos/${repository.full_name}/actions/runs?per_page=1`,

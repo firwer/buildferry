@@ -11,6 +11,7 @@ import {
 import { response } from "./fixtures.js";
 import { accountSchema } from "../src/shared/contracts.js";
 import { workerFiles } from "../src/server/worker-template.js";
+import { jobSchema } from "../src/shared/execution.js";
 
 const apps: Awaited<ReturnType<typeof executionFixture>>[] = [];
 async function make() {
@@ -94,12 +95,25 @@ describe("owner-approved worker provisioning", () => {
       vi.mocked(fetcher).mock.calls.every(([, init]) => init?.method === "GET"),
     ).toBe(true);
   });
-  it("refuses worker changes while capacity is active", async () => {
-    const { service } = await make();
-    service.save(job({ state: "running", worker, accountId: 1 }));
+  it("updates future approvals during a run without changing the running snapshot", async () => {
+    const { service, store, fetcher } = await make();
+    const running = job({ state: "running", worker, accountId: 1 });
+    service.save(running);
+    expect((await service.provisionWorker(1, [])).allowedProjects).toEqual([]);
+    expect(store.get("job", running.id, jobSchema)?.worker).toEqual(worker);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("refuses worker replacement while capacity is active", async () => {
+    const { service, store, repository } = await make();
+    const running = job({ state: "running", worker, accountId: 1 });
+    service.save(running);
+    const metadata = await repository.getMockImplementation()?.("", "");
+    if (!metadata) throw new Error("Missing fixture metadata");
+    repository.mockResolvedValue({ ...metadata, id: 999 });
     await expect(service.provisionWorker(1, [])).rejects.toThrow(
       "running jobs",
     );
+    expect(store.get("job", running.id, jobSchema)?.worker).toEqual(worker);
   });
   it("atomically installs built launchers and pins the revision on a fresh dedicated repository", async () => {
     const { service, store, fetcher } = await make();
