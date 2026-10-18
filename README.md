@@ -51,4 +51,4 @@ Reservations deliberately stay conservative when billing is delayed: completed B
 pnpm check
 ```
 
-This runs lint, types, service tests with coverage, and the production build. See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). Apache-2.0 licensed.
+This optional full check runs lint, types, service tests with coverage, and the production build. For everyday iteration, run focused checks and push; the full GitHub workflow is manual. Adopting projects keep their own checks and release approvals. See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). Apache-2.0 licensed.

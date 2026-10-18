@@ -1,8 +1,8 @@
 # Contributing
 
-Use Node 24 LTS and the pnpm version pinned in `package.json`. Run `pnpm install --frozen-lockfile`, then `pnpm check`. Tests use synthetic credentials and mocked provider requests; no real account access is needed.
+Use Node 24 LTS and the pnpm version pinned in `package.json`. Install with `pnpm install --frozen-lockfile`. For normal iteration, run the tests relevant to your change, plus lint and type checks when applicable, then push. BuildFerry's full GitHub CI is manual; it is not a prerequisite for every push or deployment. Tests use synthetic credentials and mocked provider requests; no real account access is needed.
 
-Keep changes small, use TypeScript with validated API boundaries, and add tests for changed behavior. Service, contract, and dashboard coverage is enforced at 80% lines, statements and functions, and 75% branches. After building, run `pnpm exec playwright install chromium` and `pnpm test:browser` for desktop/mobile browser checks. Process entrypoints and backup are verified by smoke tests.
+Keep changes small, use TypeScript with validated API boundaries, and add focused tests for changed behavior. Use `pnpm check` for broader validation when needed. The optional coverage run checks 80% lines, statements and functions, and 75% branches. After building, `pnpm exec playwright install chromium` and `pnpm test:browser` provide desktop/mobile browser checks. The manual CI also checks container startup and recovery.
 
 Run `pnpm format` before submitting changes. Describe the behavior and validation in the pull request. Do not commit credentials, account usage exports, private source, local databases, or keys. Use fictional examples in public docs. New dependencies must earn their place.
 
