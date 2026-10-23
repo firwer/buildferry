@@ -2,10 +2,6 @@
 
 BuildFerry routes independent builds and tests across a company's connected GitHub accounts, with Ubicloud as budgeted fallback. One administrator manages account minutes, reserves, machines and priorities. Each account owner authorizes GitHub access once.
 
-**Status: working live pilot.** Self-hosting, GitHub App registration, two account authorizations, billing reads, private worker installation and Ubicloud dispatch have been exercised on a real deployment. An actual private-source build and full active test command passed independent result verification and published successful additional checks. An earlier test attempt reached its time limit and stayed failed; its resource-aware retry completed the original scope. A second owner's worker and matched provider benchmarks still need live validation. Existing project workflows and release gates stay in place; their migration is a separate reviewed step. See [implementation status](docs/implementation-status.md).
-
-Next: [performance and budget rollout](docs/performance-and-budget-plan.md), covering three or more contributing accounts, free-first queueing, cache reuse, balanced test groups and measured speed-versus-minutes tradeoffs.
-
 The [native runner broker](docs/native-runner-design.md) supplies single-use machines for original GitHub jobs. The dashboard discovers repositories, workflows and job dependencies, and saves workflow defaults plus job-specific provider and machine overrides. Standard and Premium x64 Ubicloud machines are selectable. GitHub keeps the original steps, checks, caches, artifacts and release approvals. Native automation has regression coverage; the second account's live worker and private cross-account pilot still need validation. See the [Wisbid concurrency rollout](docs/wisbid-performance-next.md) for test sharding, build and image cache experiments.
 
 ## Run locally
@@ -46,9 +42,6 @@ The default Compose file exposes port 8787 on loopback and retains configuration
 - Explicit GitHub-only and Ubicloud benchmark routes for comparing the same revision and approved commands. No performance improvement is claimed without measurements.
 
 GitHub bills each workflow to its repository owner. After an account is connected and its App access approved, the administrator selects projects and sets up its worker. BuildFerry creates a fresh private CI repository with a README using GitHub's Repository creation permission. Existing Apps need that permission approved first; manual selection of an existing fresh private repository remains available. BuildFerry refuses to overwrite existing CI. Public source repositories already have free standard hosted runners. [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
-
-Reservations deliberately stay conservative when billing is delayed: completed BuildFerry usage remains counted locally, so it can temporarily overlap reported owner-wide usage. Keep GitHub's own spending controls and a reserve for workflows outside BuildFerry. The current test planner does not execute shards or merge coverage automatically. Keep those original checks until a reviewed integration proves complete results.
-
 ## Develop and contribute
 
 ```sh
