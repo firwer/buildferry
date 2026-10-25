@@ -135,6 +135,8 @@ export class GitHub {
     let total = 0;
     let worker = 0;
     let attributed = Boolean(workerRepository);
+    const workerName = workerRepository?.toLowerCase();
+    const qualifiedWorkerName = `${login}/${workerRepository}`.toLowerCase();
     for (const item of report.usageItems) {
       if (
         item.product.toLowerCase() !== "actions" ||
@@ -152,9 +154,11 @@ export class GitHub {
       }
       total += item.quantity;
       if (!item.repositoryName) attributed = false;
+      const repositoryName = item.repositoryName?.toLowerCase();
       if (
-        item.repositoryName?.toLowerCase() ===
-        `${login}/${workerRepository}`.toLowerCase()
+        workerName &&
+        (repositoryName === workerName ||
+          repositoryName === qualifiedWorkerName)
       )
         worker += item.quantity;
     }

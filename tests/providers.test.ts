@@ -7,6 +7,10 @@ import {
 } from "../src/server/providers/ubicloud.js";
 import { z } from "zod";
 import { projectId, response, sampleApp } from "./fixtures.js";
+import { newAccount } from "../src/server/auth.js";
+import { executionCapacity } from "../src/server/execution-capacity.js";
+import { currentPeriod } from "../src/server/routing.js";
+import { job, project, worker } from "./execution-fixtures.js";
 
 describe("provider requests", () => {
   it("authenticates GitHub reads and disables redirects", async () => {
@@ -85,6 +89,131 @@ describe("provider requests", () => {
 });
 
 describe("GitHub usage and repository eligibility", () => {
+  it.each([
+    ["buildferry-ci", 994],
+    ["BUILDFERRY-CI", 994],
+    ["owner/buildferry-ci", 994],
+    ["OwNeR/BuildFerry-CI", 994],
+    ["other/buildferry-ci", 0],
+    ["owner/buildferry-ci-extra", 0],
+    ["prefix-buildferry-ci", 0],
+  ])(
+    "attributes only exact worker repository identity %s",
+    async (repositoryName, workerUsedMinutes) => {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+        response({
+          usageItems: [
+            {
+              date: "2026-10-25",
+              product: "Actions",
+              sku: "actions_linux",
+              quantity: 994,
+              unitType: "minutes",
+              repositoryName,
+            },
+          ],
+        }),
+      );
+      expect(
+        await new GitHub(fetcher).usageReport(
+          "owner",
+          "token",
+          "2026-10",
+          "buildferry-ci",
+        ),
+      ).toEqual({ usedMinutes: 994, workerUsedMinutes });
+    },
+  );
+
+  it("does not debit the same 994 billed worker minutes twice when admitting a 15-minute build", async () => {
+    const period = currentPeriod();
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      response({
+        usageItems: [
+          {
+            date: `${period}-25`,
+            product: "Actions",
+            sku: "actions_linux",
+            quantity: 994,
+            unitType: "minutes",
+            repositoryName: "buildferry-ci",
+          },
+        ],
+      }),
+    );
+    const usage = await new GitHub(fetcher).usageReport(
+      "owner",
+      "token",
+      period,
+      "buildferry-ci",
+    );
+    const originalAccount = newAccount(1, "owner", "member");
+    const account = {
+      ...originalAccount,
+      ...usage,
+      verifiedAt: Date.now(),
+      repositoryVerified: true,
+      settings: {
+        ...originalAccount.settings,
+        workerRepository: "buildferry-ci",
+        allowanceConfirmed: true,
+        reserveMinutes: 0,
+      },
+    };
+    const demand = job({ recipe: { ...project.recipe, maxMinutes: 15 } });
+    const completed = job({
+      accountId: account.id,
+      state: "succeeded",
+      actualMinutes: 994,
+      cancellationConfirmed: true,
+    });
+    const capacity = executionCapacity(
+      demand,
+      [worker],
+      [account],
+      [],
+      [completed],
+    );
+    expect({
+      usage,
+      availableMinutes: capacity.candidates.find(
+        (candidate) => candidate.id === "github:1",
+      )?.availableMinutes,
+    }).toEqual({
+      usage: { usedMinutes: 994, workerUsedMinutes: 994 },
+      availableMinutes: 1006,
+    });
+    expect(capacity.eligible).toHaveLength(1);
+  });
+
+  it.each([null, undefined, ""])(
+    "keeps unattributed billing conservative (%s)",
+    async (repositoryName) => {
+      const entry = {
+        date: "2026-10-25",
+        product: "Actions",
+        sku: "actions_linux",
+        unitType: "minutes",
+      };
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+        response({
+          usageItems: [
+            { ...entry, quantity: 994, repositoryName: "buildferry-ci" },
+            { ...entry, quantity: 1, repositoryName },
+          ],
+        }),
+      );
+      expect(
+        await new GitHub(fetcher).usageReport(
+          "owner",
+          "token",
+          "2026-10",
+          "buildferry-ci",
+        ),
+      ).toEqual({ usedMinutes: 995, workerUsedMinutes: null });
+    },
+  );
+
   it("credits only the selected worker's attributed minutes and fails conservatively on missing attribution", async () => {
     const entry = {
       date: "2026-10-18",
