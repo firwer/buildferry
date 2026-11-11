@@ -1,6 +1,29 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { cpus } from "node:os";
+import { cpus, homedir } from "node:os";
+
+function ubicloudVmFamily(): "standard" | "premium" | undefined {
+  try {
+    // Ubicloud writes the same VM metadata here that it shows in the job log.
+    const setup: unknown = JSON.parse(
+      readFileSync(
+        path.join(homedir(), "actions-runner", ".setup_info"),
+        "utf8",
+      ),
+    );
+    if (!Array.isArray(setup)) return;
+    const runner = setup.find(
+      (entry) => entry?.group === "Ubicloud Managed Runner",
+    );
+    if (typeof runner?.detail !== "string") return;
+    const family = /^VM Family: (standard|premium)\r?$/m.exec(
+      runner.detail,
+    )?.[1];
+    if (family === "standard" || family === "premium") return family;
+  } catch {
+    // Other runner images may not provide this file.
+  }
+}
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -37,6 +60,7 @@ if (!identityResponse.ok)
 const identity: { value?: string } = await identityResponse.json();
 if (typeof identity.value !== "string")
   throw new Error("GitHub host identity is missing.");
+const vmFamily = ubicloudVmFamily();
 let result: Response | undefined;
 for (let attempt = 0; attempt < 30; attempt++) {
   result = await fetch(new URL("/api/native/claim", base), {
@@ -51,6 +75,7 @@ for (let attempt = 0; attempt < 30; attempt++) {
       requestId,
       runId,
       cpuModel: cpus()[0]?.model ?? "",
+      vmFamily,
     }),
   });
   if (result.status !== 425) break;

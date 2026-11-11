@@ -60,6 +60,15 @@ afterEach(() => {
 
 describe("native host bootstrap", () => {
   it("requests a bound GitHub identity, reports hardware and writes a masked single-use file", async () => {
+    mocks.read.mockReturnValueOnce(
+      JSON.stringify([
+        { group: "Runner Image", detail: "Image: ubuntu-24.04" },
+        {
+          group: "Ubicloud Managed Runner",
+          detail: "Label: ubicloud-standard-4\nVM Family: standard\nArch: x64",
+        },
+      ]),
+    );
     const network = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -78,6 +87,7 @@ describe("native host bootstrap", () => {
       requestId,
       runId: 901,
       cpuModel: expect.any(String),
+      vmFamily: "standard",
     });
     expect(mocks.write).toHaveBeenCalledWith(
       expect.stringContaining("buildferry-native-jit"),

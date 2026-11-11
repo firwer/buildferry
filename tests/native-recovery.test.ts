@@ -89,61 +89,76 @@ describe("native machine choices", () => {
     expect(cpuFamily("AMD Ryzen 9 9950X 16-Core Processor")).toBe("premium");
     expect(cpuFamily("unknown")).toBe("unknown");
   });
-  it("rejects a Premium upgrade before providing a Standard job with a runner", async () => {
-    const app = await make();
-    const lease = await dispatch(app);
-    app.native.service.save({
-      ...lease,
-      providerId: projectId,
-      expectedFamily: "standard",
-      standardRateMicros: 1250,
-      premiumRateMicros: 2000,
-      reservedMicros: 30_000,
-    });
-    app.verify.mockResolvedValue({
-      ...app.claims,
-      runner_environment: "self-hosted",
-    });
-    const result = await app.server.inject({
-      method: "POST",
-      url: "/api/native/claim",
-      headers: { authorization: "Bearer signed" },
-      payload: {
-        requestId: lease.id,
-        runId: 901,
-        cpuModel: "AMD Ryzen 9 9950X",
-      },
-    });
-    expect(result.statusCode).toBe(409);
-    expect(app.state.jitRequests).toBe(0);
-    const saved = app.native.service.read(lease.id)!;
-    expect(saved).toMatchObject({ state: "cancelling", hostFamily: "premium" });
-    expect(hostCost(saved, 1)).toBe(2000);
-  });
-  it("accepts the selected Standard family and snapshots its actual estimate", async () => {
-    const app = await make();
-    const lease = await dispatch(app);
-    app.native.service.save({
-      ...lease,
-      providerId: projectId,
-      expectedFamily: "standard",
-      standardRateMicros: 1250,
-      premiumRateMicros: 2000,
-      reservedMicros: 30_000,
-    });
-    app.verify.mockResolvedValue({
-      ...app.claims,
-      runner_environment: "self-hosted",
-    });
-    const result = await app.server.inject({
-      method: "POST",
-      url: "/api/native/claim",
-      headers: { authorization: "Bearer signed" },
-      payload: { requestId: lease.id, runId: 901, cpuModel: "AMD EPYC 9354P" },
-    });
-    expect(result.statusCode).toBe(200);
-    expect(hostCost(app.native.service.read(lease.id)!, 2)).toBe(2500);
-  });
+  it.each([
+    { cpuModel: "AMD Ryzen 9 9950X" },
+    { cpuModel: "AMD EPYC 9354P", vmFamily: "premium" },
+  ])(
+    "rejects a Premium upgrade before providing a Standard job with a runner (%j)",
+    async (hardware) => {
+      const app = await make();
+      const lease = await dispatch(app);
+      app.native.service.save({
+        ...lease,
+        providerId: projectId,
+        expectedFamily: "standard",
+        standardRateMicros: 1250,
+        premiumRateMicros: 2000,
+        reservedMicros: 30_000,
+      });
+      app.verify.mockResolvedValue({
+        ...app.claims,
+        runner_environment: "self-hosted",
+      });
+      const result = await app.server.inject({
+        method: "POST",
+        url: "/api/native/claim",
+        headers: { authorization: "Bearer signed" },
+        payload: {
+          requestId: lease.id,
+          runId: 901,
+          ...hardware,
+        },
+      });
+      expect(result.statusCode).toBe(409);
+      expect(app.state.jitRequests).toBe(0);
+      const saved = app.native.service.read(lease.id)!;
+      expect(saved).toMatchObject({
+        state: "cancelling",
+        hostFamily: "premium",
+      });
+      expect(hostCost(saved, 1)).toBe(2000);
+    },
+  );
+  it.each([
+    { cpuModel: "AMD EPYC 9354P" },
+    { cpuModel: "AMD Ryzen 9 9950X", vmFamily: "standard" },
+  ])(
+    "accepts the selected Standard family and snapshots its actual estimate (%j)",
+    async (hardware) => {
+      const app = await make();
+      const lease = await dispatch(app);
+      app.native.service.save({
+        ...lease,
+        providerId: projectId,
+        expectedFamily: "standard",
+        standardRateMicros: 1250,
+        premiumRateMicros: 2000,
+        reservedMicros: 30_000,
+      });
+      app.verify.mockResolvedValue({
+        ...app.claims,
+        runner_environment: "self-hosted",
+      });
+      const result = await app.server.inject({
+        method: "POST",
+        url: "/api/native/claim",
+        headers: { authorization: "Bearer signed" },
+        payload: { requestId: lease.id, runId: 901, ...hardware },
+      });
+      expect(result.statusCode).toBe(200);
+      expect(hostCost(app.native.service.read(lease.id)!, 2)).toBe(2500);
+    },
+  );
 });
 
 describe("native completion recovery", () => {

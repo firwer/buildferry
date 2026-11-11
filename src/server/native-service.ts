@@ -466,6 +466,7 @@ export class NativeService {
         requestId: z.uuid(),
         runId: z.number().int().positive(),
         cpuModel: z.string().max(200).optional(),
+        vmFamily: z.enum(["standard", "premium"]).optional(),
       })
       .strict()
       .parse(request.body);
@@ -508,7 +509,7 @@ export class NativeService {
     if (lease.remoteRunId !== input.runId)
       throw new HttpError(403, "This is a different host run.");
     if (lease.providerId) {
-      const family = cpuFamily(input.cpuModel ?? "");
+      const family = input.vmFamily ?? cpuFamily(input.cpuModel ?? "");
       this.save({ ...lease, hostFamily: family });
       if (
         lease.expectedFamily &&
@@ -519,12 +520,11 @@ export class NativeService {
           ...lease,
           hostFamily: family,
           state: "cancelling",
-          message:
-            "Ubicloud returned different hardware. Check its automatic Premium setting before retrying. The source job was not started.",
+          message: `Ubicloud runner family mismatch (expected ${lease.expectedFamily}, detected ${family}).`,
         });
         throw new HttpError(
           409,
-          "Ubicloud did not supply the selected machine family. Check automatic Premium in Ubicloud settings.",
+          "Ubicloud did not supply the selected VM family.",
         );
       }
     }
